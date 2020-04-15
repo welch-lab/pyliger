@@ -4,6 +4,11 @@ import re
 import scipy.io
 import numpy as np
 import pandas as pd
+from scipy.sparse import csr_matrix, isspmatrix
+from scipy.sparse.linalg import norm
+from anndata import AnnData
+
+from utilities import *
 
 ## The LIGER Class
 class Liger(object):
@@ -61,7 +66,7 @@ class Liger(object):
     @scale_data.setter
     def scale_data(self, value):
         self.scale_data = value
-   """
+   
        
     @property
     def cell_data(self):
@@ -69,7 +74,7 @@ class Liger(object):
     @cell_data.setter
     def cell_data(self, value):
         self.cell_data = value
-        
+    """
     def show(self):
         print("An object of class liger with {} datasets and {} total cells.".format(len(self.raw_data),len(self.cell_data)))
 
@@ -92,25 +97,33 @@ def read10X(sample_dirs,
      Expression, Antibody Capture, CRISPR, CUSTOM).
      
      Args:
-         sample_dirs(list): List of directories containing either matrix.mtx(.gz) file along with genes.tsv,
+         sample_dirs(list):
+             List of directories containing either matrix.mtx(.gz) file along with genes.tsv,
              (features.tsv), and barcodes.tsv, or outer level 10X output directory (containing outs directory).
-         sample_names(list): List of names to use for samples (corresponding to sample_dirs)
-         merge(bool): Whether to merge all matrices of the same data type across samples or leave as list
+         sample_names(list): 
+             List of names to use for samples (corresponding to sample_dirs)
+         merge(bool): 
+             Whether to merge all matrices of the same data type across samples or leave as list
              of matrices (default True).
-         num_cells(): Optional limit on number of cells returned for each sample (only for Gene
-                  Expression data). Retains the cells with the highest numbers of transcripts (default None).
-         min.umis(int): Minimum UMI threshold for cells (default 0).
-         use_filtered(bool): Whether to use 10X's filtered data (as opposed to raw). Only relevant for
+         num_cells(): 
+             Optional limit on number of cells returned for each sample (only for Gene
+             Expression data). Retains the cells with the highest numbers of transcripts (default None).
+         min_umis(int): 
+             Minimum UMI threshold for cells (default 0).
+         use_filtered(bool): 
+             Whether to use 10X's filtered data (as opposed to raw). Only relevant for
              sample.dirs containing 10X outs directory (default FALSE).
-         reference(): For 10X V<3, specify which reference directory to use if sample.dir is outer
-             level 10X directory (only necessary if more than one reference used for sequencing).
-             (default None)
-         data_type(str): Indicates the protocol of the input data. If not specified, input data will be 
+         reference(): 
+             For 10X V<3, specify which reference directory to use if sample.dir is outer
+             level 10X directory (only necessary if more than one reference used for sequencing). (default None)
+         data_type(str): 
+             Indicates the protocol of the input data. If not specified, input data will be 
              considered scRNA-seq data (default 'rna', alternatives: 'atac'). 
 
      Return:
-         datalist(list): List of merged matrices across data types (returns sparse matrix if only one data type
-                 detected), or nested list of matrices organized by sample if merge=F.
+         datalist(list): 
+             List of merged matrices across data types (returns sparse matrix if only one data type
+             detected), or nested list of matrices organized by sample if merge=F.
          
      Usage:
          >>> sample_dir1 = "path/to/outer/dir1" # 10X output directory V2 -- contains outs/raw_gene_bc_matrices/<reference>/...
@@ -119,9 +132,9 @@ def read10X(sample_dirs,
          >>> ligerex = createLiger(expr = dges1[["Gene Expression"]], custom = dges1[["CUSTOM"]])
     """
     datalist = []
-    datatypes = 'Gene Expression'
+    datatypes = np.array(['Gene Expression'])
     
-    if len(num_cells) == 1:
+    if num_cells is not None:
         num_cells = np.repeat(num_cells, len(sample_dirs))
     
     for i in range(len(sample_dirs)):
@@ -132,11 +145,13 @@ def read10X(sample_dirs,
         # Construct sample path
         sample_dir = sample_dirs[i]
         inner1 = sample_dir + '/outs'
+
         if os.path.exists(inner1):
             sample_dir = inner1
             is_v3 = os.path.exists(sample_dir + '/filtered_feature_bc_matrix')
             matrix_prefix = str(np.where(use_filtered, 'filtered', 'raw'))
             if is_v3:
+                print('yes')
                 sample_dir = sample_dir + '/' + matrix_prefix + '_feature_bc_matrix'
             else:
                 if reference is None:
@@ -145,6 +160,8 @@ def read10X(sample_dirs,
                         raise ValueError('Multiple reference genomes found. Please specify a single one.')
                     else:
                         reference = references[0]
+            if reference is None:
+                reference = ''
             sample_dir = sample_dir + '/' + matrix_prefix + '_gene_bc_matrices/' + reference
         else:
             is_v3 = os.path.exists(sample_dir + '/features.tsv.gz')
@@ -160,16 +177,18 @@ def read10X(sample_dirs,
         
         # Read in raw data (count matrix)
         rawdata = scipy.io.mmread(matrix_file)
-        rawdata = rawdata.toarray() # convert to np array
+        rawdata = csr_matrix(rawdata) # convert to csr matrix
         
         # filter for UMIs first to increase speed
-        umi_pass = np.sum(rawdata, axis=0) > min_umis
+        umi_pass = np.sum(rawdata, axis=0) > min_umis 
+        umi_pass = np.asarray(umi_pass).flatten() # convert to np array
         if len(umi_pass) == 0:
             print('No cells pass UMI cutoff. Please lower it.')
+        rawdata = rawdata.toarray()
         rawdata = rawdata[:,umi_pass]
         
         # Read in barcodes
-        barcodes = pd.read_csv(barcodes_file, sep='\t')
+        barcodes = pd.read_csv(barcodes_file, sep='\t', header=None)
         barcodes = barcodes.to_numpy().flatten()[umi_pass]
         
         # remove -1 tag from barcodes
@@ -177,21 +196,23 @@ def read10X(sample_dirs,
             barcodes[i] = re.sub('\-1$', '', barcodes[i])
         
         if data_type == 'rna':
-            features = pd.read_csv(features_file, sep='\t').to_numpy()
+            features = pd.read_csv(features_file, sep='\t', header=None).to_numpy() # convert to np array
             row_names = features[:,1]
             # equal to make.unique function in R
             count_dict = {}
-            for name in row_names:
+            for i in range(len(row_names)):
+                name = row_names[i]
                 if name not in count_dict:
                     count_dict[name] = 0
                 if name in row_names:
                     count_dict[name] += 1
-                    if my_dict[name] > 1:
-                        row_names[name] = row_names[name] + '.' + str(count_dict[name]-1)
+                    if count_dict[name] > 1:
+                        row_names[i] = row_names[i] + '.' + str(count_dict[name]-1)
             
         elif data_type == 'atac':
-            features = pd.read_csv(features_file, sep='\t').to_numpy()
-            row_names = np.array([str(feature[0]) + ':' + str(feature[1]) + '-' + str(feature[2]) for feature in features])
+            features = pd.read_csv(features_file, sep='\t', header=None).to_numpy()
+            features = np.array([str(feature[0]) + ':' + str(feature[1]) + '-' + str(feature[2]) for feature in features])
+            row_names = features
         
         # since some genes are only differentiated by ENSMBL
         col_names = barcodes
@@ -199,14 +220,23 @@ def read10X(sample_dirs,
         # split based on 10X datatype -- V3 has Gene Expression, Antibody Capture, CRISPR, CUSTOM
         # V2 has only Gene Expression by default and just two columns
         if features.shape[1] == 0:
-            sample_name = 'Chromatin Accessibility'
+            sample_name = np.array(['Chromatin Accessibility'])
         elif features.shape[1] < 3:
-            sample_name = 'Gene Expression'
-        else
-        
-        # num.cells filter only for gene expression data
-        if num_cells is None:
-            if 
+            sample_name = np.array(['Gene Expression'])
+        else:
+            sample_datatypes = features[:,2]
+            sample_name = np.unique(sample_datatypes)
+            # keep track of all unique datatypes
+            datatypes = np.union1d(datatypes, sample_name)
+            
+            samplelist = {}
+            for name in datatypes:
+                rawdata = rawdata[:,sample_datatypes == name]
+        # num_cells filter only for gene expression data
+        if num_cells is not None:
+            if 'Gene Expression' in sample_name or 'Chromatin Accessibility' in sample_name:
+                data_label = sample_name
+                cs = 
         
         if merge:
             print('Merging samples')
@@ -214,7 +244,13 @@ def read10X(sample_dirs,
             return datalist
         
         # if only one type of data present
+
+        samplelist = pd.DataFrame(data=rawdata, index=row_names, columns=col_names)
+        datalist.append(samplelist)
+    
         
+    return datalist
+
 def createLiger(raw_data, 
                 make_sparse = True, 
                 take_gene_union = False,
@@ -227,61 +263,91 @@ def createLiger(raw_data,
     It initializes cell.data with nUMI and nGene calculated for every cell.
     
     Args:
-        raw_data(list): List of expression matrices (gene by cell). Should be named by dataset.
-        make_sparse(bool): Whether to convert raw data into sparse matrices (default TRUE).
-        take.gene.union(bool): Whether to fill out raw.data matrices with union of genes across all
-        datasets (filling in 0 for missing data) (requires make.sparse=T) (default FALSE).
-        remove_missing(bool): Whether to remove cells not expressing any measured genes, and genes not
-        expressed in any cells (if take.gene.union = T, removes only genes not expressed in any
-        dataset) (default TRUE).
+        raw_data(list): 
+            List of AnnData objects which store expression matrices (gene by cell). Should be named by dataset.
+        make_sparse(bool): optional, (default True) 
+            Whether to convert raw_data into sparse matrices.
+        take_gene_union(bool): optional,  (default False) 
+            Whether to fill out raw_data matrices with union of genes across all
+            datasets (filling in 0 for missing data) (requires make_sparse=T).
+        remove_missing(bool): optional, (default True)
+            Whether to remove cells not expressing any measured genes, and genes not
+            expressed in any cells (if take_gene_union = T, removes only genes not expressed in any
+            dataset).
         
     Return:
-        liger_object(liger): object with raw.data slot set.
+        liger_object(liger): 
+            object with raw_data slot set.
     
     Usage:
-        >>> Y = matrix(c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), nrow = 4, byrow = T)
-        >>> Z = matrix(c(1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2), nrow = 4, byrow = T)
-        >>> ligerex = createLiger(list(y_set = Y, z_set = Z))
+        >>> adata1 = AnnData(np.arange(12).reshape((4, 3)))
+        >>> adata2 = AnnData(np.arange(12).reshape((4, 3)))
+        >>> ligerex = createLiger([adata1, adata2])
         
-    """
+    """  
     if make_sparse:
-        if :
-            
-            # Check if dimnames exist
-            if :
-                raise ValueError('Raw data must have both row (gene) and column (cell) names.')
-            
-    if 
-        raise ValueError('At least one cell name is repeated across datasets; please make sure all cell names are unique.')
+        for i in range(len(raw_data)):
+            if isspmatrix(raw_data[i].X):
+                raw_data[i].X = csr_matrix(raw_data[i].X)      
+                # check if dimnames exist
+                if not raw_data[i].obs_keys() or not raw_data[i].var_keys():
+                    raise ValueError('Raw data must have both row (gene) and column (cell) names.')
+                # check whether cell name is unique or not
+                if raw_data[i].var['cell_name'].shape[0] - np.unique(raw_data[i].var['cell_name']).shape[0] > 0 and raw_data[i].X.shape[0] > 1
+                    raise ValueError('At least one cell name is repeated across datasets; please make sure all cell names are unique.')
+            else:
+                raw_data[i].X = csr_matrix(raw_data[i].X)        
 
     if take_gene_union:
-        merged_data = 
+        merged_data = MergeSparseDataAll(raw_data)
         if remove_missing:
-            missing_genes = 
+            missing_genes = np.array(np.sum(merged_data.X, axis=0)).flatten()
             if len(missing_genes) > 0:
-                print()
+                print('Removing {} genes not expressed in any cells across merged datasets.'.format(len(missing_genes)))
+                if len(missing_genes) < 25:
+                    print(merged_data.obs_names[missing_genes])
+                merged_data = merged_data[~missing_genes,:].copy()
     
+    # Create liger object based on raw data
     liger_object = Liger(raw_data)
     
-    # remove missing cells
+    # Remove missing cells
     if remove_missing:
         liger_object = removeMissingObs(liger_object, use_cols = True)
-        
         #remove missing genes if not already merged
         if not take_gene_union:
             liger_object = removeMissingObs(liger_object, use_cols = False)
     
     # Initialize cell_data for liger_object with nUMI, nGene, and dataset
-    nUMI = 
+    nUMI = np.sum(rawdata, axis=0)
     nGene = 
     dataset = 
-    liger_object.cell_data = 
+    liger_object.cell_data = pd.DataFrame()
     
     return liger_object
 
 
-# Normalize raw datasets to column sums
 def normalize(liger_object):
+    """ Normalize raw datasets to column sums
+    
+    This function normalizes data to account for total gene expression across a cell.
+    
+    Args:
+        liger_object(liger): 
+            liger object with raw_data
+    
+    Return:
+        liger_object(liger):
+            liger object with norm_data
+            
+    Usage:
+        >>> adata1 = AnnData(np.arange(12).reshape((4, 3)))
+        >>> adata2 = AnnData(np.arange(12).reshape((4, 3)))
+        >>> ligerex = createLiger([adata1, adata2])
+        >>> ligerex = normalize(ligerex)
+    """
+    liger_object = removeMissingObs(liger_object, slot_use='raw_data', use_cols=True)
+    liger_object.norm_data = [csr_matrix(raw_data/np.sum(raw_data, axis=0)) for raw_data in liger_object.raw_data]
     return liger_object
 
 # Select a subset of informative genes
@@ -541,9 +607,9 @@ def getFactorMarkers(liger_object, dataset1 = None, dataset2 = None, factor_shar
 
 # Create a Seurat object containing the data from a liger object
 # TO-DO names function
-def ligerToSeurat(liger_object, nms = names(object@H), renormalize = True, use_liger_genes = True,
-                  by_dataset = False):
-    pass
+#def ligerToSeurat(liger_object, nms = names(object@H), renormalize = True, use_liger_genes = True,
+#                  by_dataset = False):
+#    pass
 
 # Create liger object from one or more Seurat objects
 def seuratToLiger(liger_object, combined_seurat = False, names = "use-projects", meta_var = None,
