@@ -5,7 +5,6 @@ import scipy.io
 import numpy as np
 import pandas as pd
 from scipy.sparse import csr_matrix, isspmatrix
-from scipy.sparse.linalg import norm
 from anndata import AnnData
 
 from utilities import *
@@ -259,8 +258,8 @@ def createLiger(adata_list,
     
     This function initializes a liger object with the raw data passed in. It requires a list of
     expression (or another single-cell modality) matrices (gene by cell) for at least two datasets.
-    By default, it converts all passed data into sparse matrices (dgCMatrix) to reduce object size.
-    It initializes cell.data with nUMI and nGene calculated for every cell.
+    By default, it converts all passed data into Compressed Sparse Row matrix (CSR matrix) to reduce 
+    object size. It initializes cell_data with nUMI and nGene calculated for every cell.
     
     Args:
         adata_list(list): 
@@ -270,11 +269,11 @@ def createLiger(adata_list,
             Whether to convert raw_data into sparse matrices.
         take_gene_union(bool): optional,  (default False) 
             Whether to fill out raw_data matrices with union of genes across all
-            datasets (filling in 0 for missing data) (requires make_sparse=T).
+            datasets (filling in 0 for missing data) (requires make_sparse=True).
         remove_missing(bool): optional, (default True)
             Whether to remove cells not expressing any measured genes, and genes not
-            expressed in any cells (if take_gene_union = T, removes only genes not expressed in any
-            dataset).
+            expressed in any cells (if take_gene_union=True, removes only genes not 
+            expressed in any dataset).
         
     Return:
         liger_object(liger): 
@@ -285,31 +284,39 @@ def createLiger(adata_list,
         >>> adata2 = AnnData(np.arange(12).reshape((4, 3)))
         >>> ligerex = createLiger([adata1, adata2])
         
-    """  
+    """ 
+    # Make matrix sparse
     if make_sparse:
         for i in range(len(adata_list)):
             if isspmatrix(adata_list[i].X):
+                # forse raw data to be csr matrix
                 adata_list[i].X = csr_matrix(adata_list[i].X)      
                 # check if dimnames exist
                 if not adata_list[i].obs_keys() or not adata_list[i].var_keys():
                     raise ValueError('Raw data must have both row (gene) and column (cell) names.')
                 # check whether cell name is unique or not
-                if adata_list[i].var['cell_name'].shape[0] - np.unique(adata_list[i].var['cell_name']).shape[0] > 0 and raw_data[i].X.shape[0] > 1
+                if adata_list[i].var['cell_name'].shape[0] - np.unique(adata_list[i].var['cell_name']).shape[0] > 0 and raw_data[i].X.shape[0] > 1     
                     raise ValueError('At least one cell name is repeated across datasets; please make sure all cell names are unique.')
             else:
                 adata_list[i].X = csr_matrix(adata_list[i].X)        
-
-    if take_gene_union:
+    
+    # Take gene union (requires make_sparse=True)
+    if take_gene_union and make_sparse:
         merged_data = MergeSparseDataAll(adata_list)
         if remove_missing:
-            missing_genes = np.array(np.sum(merged_data.X, axis=0)).flatten()
+            missing_genes = np.array(np.sum(merged_data.X, axis=1)).flatten() == 0
             if len(missing_genes) > 0:
                 print('Removing {} genes not expressed in any cells across merged datasets.'.format(len(missing_genes)))
+                # show gene name when the total of missing genes is less than 25
                 if len(missing_genes) < 25:
-                    print(merged_data.obs_names[missing_genes])
+                    print(merged_data.obs['gene name'][missing_genes])
+                # save data after removing missing genes
                 merged_data = merged_data[~missing_genes,:].copy()
+        # fill out raw_data matrices with union of genes across all datasets
+        for i in range(len(adata_list)):
+            adata_list[i] = merged_data[:, merged_data.var['barcodes']==adata_list[i].var['barcodes']].copy()
     
-    # Create liger object based on raw data
+    # Create liger object based on raw data list
     liger_object = Liger(adata_list)
     
     # Remove missing cells
@@ -320,10 +327,13 @@ def createLiger(adata_list,
             liger_object = removeMissingObs(liger_object, use_cols = False)
     
     # Initialize cell_data for liger_object with nUMI, nGene, and dataset
-    nUMI = np.sum(adata_list, axis=0)
-    nGene = 
-    dataset = 
     liger_object.cell_data = pd.DataFrame()
+    for adata in adata_list:
+        temp = pd.DataFrame(index=adata.var['barcodes'])
+        temp['nUMI'] = np.array(np.sum(adata.X, axis=0)).flatten()
+        temp['nGene'] = np.count_nonzero(adata.X.toarray(), axis=0)
+        temp['dataset'] = np.repeat(adata.obs['data type'][0], adata.var['barcodes'].shape[0])
+        liger_object.cell_data.append(temp)
     
     return liger_object
 
