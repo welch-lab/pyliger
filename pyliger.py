@@ -358,7 +358,10 @@ def normalize(liger_object):
         >>> ligerex = normalize(ligerex)
     """
     liger_object = removeMissingObs(liger_object, slot_use='raw_data', use_cols=True)
-    liger_object.norm_data = [csr_matrix(raw_data/np.sum(raw_data, axis=0)) for raw_data in liger_object.raw_data]
+    
+    for i in range(len(liger_object.adata_list)):
+        liger_object.adata_list[i].layers['norm_data'] = csr_matrix(liger_object.adata_list[i].X/np.sum(liger_object.adata_list[i].X, axis=0))
+    
     return liger_object
 
 
