@@ -517,7 +517,7 @@ def scaleNotCenter(liger_object,
 
 
 def removeMissingObs(liger_object, 
-                     slot_use = "raw_data", 
+                     slot_use = 'raw_data', 
                      use_cols = True):
     """ Remove cells/genes with no expression across any genes/cells
     
@@ -538,28 +538,32 @@ def removeMissingObs(liger_object,
     Example:
         >>> ligerex = removeMissingObs(ligerex)
     """
-    filter_data = getattr(liger_object, slot_use)
     removed = str(np.where(slot_use in ['raw_data', 'norm_data'] and use_cols == True, 'cells', 'genes'))
     expressed = str(np.where(removed == 'cells', ' any genes', ''))
+    data_type = liger_object.adata_list[i].obs['data type'][0]
     
-    for i in range(len(filter_data.X)):
+    for i in range(len(liger_object.adata_list)):
+        if slot_use == 'raw_data':
+            filter_data = liger_object.adata_list[i].X
+        elif slot_use == 'scale_data':
+            filter_data = liger_object.adata_list[i].layers['scale_data']
+        
         if use_cols:
-            missing = np.array(np.sum(filter_data.X, axis=0)).flatten()
+            missing = np.array(np.sum(filter_data, axis=0)).flatten()
         else:
-            missing = np.array(np.sum(filter_data.X, axis=1)).flatten()
-            
+            missing = np.array(np.sum(filter_data, axis=1)).flatten()
         if len(missing) > 0:
-            print('Removing {} not expressing {} in {}.'.format(len(missing), removed, expressed, names(object@raw.data)[x]))
+            print('Removing {} not expressing {} in {}.'.format(len(missing), removed, expressed, data_type))
             if use_cols:
+                # show gene name when the total of missing genes is less than 25
                 if len(missing) < 25:
-                    print()
-                subset = 
+                    print(liger_object.adata_list[i].obs['gene name'][missing])
+                liger_object.adata_list[i] = liger_object.adata_list[i][:, ~missing].copy()
             else:
                 if len(missing) < 25:
-                    print()
-                subset = 
-            
-        filter_data = 
+                    print(liger_object.adata_list[i].var['barcode'][missing])
+                liger_object.adata_list[i] = liger_object.adata_list[i][~missing, :].copy()
+
     return liger_object
 
 
