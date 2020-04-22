@@ -7,7 +7,7 @@ import pandas as pd
 from scipy.sparse import csr_matrix, isspmatrix
 from anndata import AnnData
 
-from utilities import *
+from utilities import MergeSparseDataAll
 
 ## The LIGER Class
 class Liger(object):
@@ -24,8 +24,8 @@ class Liger(object):
         adata_list(list):
             List of AnnData objects, one per experiment/dataset (genes by cells)
             In each AnnData objects, main matrix stores raw data and two addtional
-            layers store normalized data and sclaed data with keys norm_data and
-            sclae_data respectively.
+            layers store normalized data and scaled data with keys norm_data and
+            scale_data respectively.
         cell_data(): 
             Dataframe of cell attributes across all datasets (nrows equal to total number
             cells across all datasets)
@@ -235,7 +235,7 @@ def read10X(sample_dirs,
         if num_cells is not None:
             if 'Gene Expression' in sample_name or 'Chromatin Accessibility' in sample_name:
                 data_label = sample_name
-                cs = 
+                cs = None
         
         if merge:
             print('Merging samples')
@@ -295,7 +295,7 @@ def createLiger(adata_list,
                 if not adata_list[i].obs_keys() or not adata_list[i].var_keys():
                     raise ValueError('Raw data must have both row (gene) and column (cell) names.')
                 # check whether cell name is unique or not
-                if adata_list[i].var['cell_name'].shape[0] - np.unique(adata_list[i].var['cell_name']).shape[0] > 0 and raw_data[i].X.shape[0] > 1     
+                if adata_list[i].var['barcodes'].shape[0] - np.unique(adata_list[i].var['barcodes']).shape[0] > 0 and adata_list[i].X.shape[0] > 1:  
                     raise ValueError('At least one cell name is repeated across datasets; please make sure all cell names are unique.')
             else:
                 adata_list[i].X = csr_matrix(adata_list[i].X)        
@@ -305,10 +305,10 @@ def createLiger(adata_list,
         merged_data = MergeSparseDataAll(adata_list)
         if remove_missing:
             missing_genes = np.array(np.sum(merged_data.X, axis=1)).flatten() == 0
-            if len(missing_genes) > 0:
-                print('Removing {} genes not expressed in any cells across merged datasets.'.format(len(missing_genes)))
+            if np.sum(missing_genes) > 0:
+                print('Removing {} genes not expressed in any cells across merged datasets.'.format(np.sum(missing_genes)))
                 # show gene name when the total of missing genes is less than 25
-                if len(missing_genes) < 25:
+                if np.sum(missing_genes) < 25:
                     print(merged_data.obs['gene name'][missing_genes])
                 # save data after removing missing genes
                 merged_data = merged_data[~missing_genes,:].copy()
@@ -332,7 +332,7 @@ def createLiger(adata_list,
         temp = pd.DataFrame(index=adata.var['barcodes'])
         temp['nUMI'] = np.array(np.sum(adata.X, axis=0)).flatten()
         temp['nGene'] = np.count_nonzero(adata.X.toarray(), axis=0)
-        temp['dataset'] = np.repeat(adata.obs['data type'][0], adata.var['barcodes'].shape[0])
+        temp['dataset'] = np.repeat(adata.uns['sample name'], adata.var['barcodes'].shape[0])
         liger_object.cell_data.append(temp)
     
     return liger_object
@@ -376,6 +376,7 @@ def selectGenes(liger_object,
                 capitalize = False, 
                 do_plot = False,
                 cex_use = 0.3):
+    pass
     """ Select a subset of informative genes
     
     This function identifies highly variable genes from each dataset and combines these gene sets
@@ -397,7 +398,7 @@ def selectGenes(liger_object,
             Alpha threshold. Controls upper bound for expected mean gene expression
             (lower threshold -> higher upper bound).
         num_genes(): optional, (default=None)
-            Number of genes to find for each dataset. Optimises the value of var.thresh
+            Number of genes to find for each dataset. Optimises the value of var_thresh
             for each dataset to get this number of genes. Accepts single value or vector with same length
             as number of datasets.
         tol(float): optional, (default 0.0001)
@@ -407,7 +408,7 @@ def selectGenes(liger_object,
         combine(str): optional, 'union' or 'intersect', (default 'union')
             How to combine variable genes across experiments.
         keep_unique(bool): optional, (default False)
-            Keep genes that occur (i.e., there is a corresponding column in raw.data) only
+            Keep genes that occur (i.e., there is a corresponding column in raw_data) only
             in one dataset.
         capitalize(bool): optional, (default False)
             Capitalize gene names to match homologous genes (ie. across species)
@@ -428,22 +429,25 @@ def selectGenes(liger_object,
         >>> ligerex = normalize(ligerex)
         >>> ligerex = selectGenes(ligerex) # use default selectGenes settings
         >>> ligerex = selectGenes(ligerex, var_thresh=0.8) # select a smaller subset of genes
-    """
-    if datasets_use is None:
-        datasets_use = range(1,len(liger_object.raw_data))
-        
-    # Expand if only single var.thresh passed
-    var_thresh = np.repeat(var_thresh, len(liger_object.raw_data))
-    num_genes = np.repeat(num_genes, len(liger_object.raw_data))
     
-    if not :
-        datasets_use = 
+    if datasets_use is None:
+        datasets_use = list(range(len(liger_object.adata_list)))
+        
+    # Expand if only single var_thresh passed
+    if isinstance(var_thresh, int) or isinstance(var_thresh, float):
+        var_thresh = np.repeat(var_thresh, len(liger_object.adata_list))
+    if isinstance(num_genes, int) or isinstance(num_genes, float):
+        num_genes = np.repeat(num_genes, len(liger_object.adata_list))
+    
+    if not np.array_equal(np.intersect1d(datasets_use, list(range(len(liger_object.adata_list)))), datasets_use):
+        datasets_use = np.intersect1d(datasets_use, list(range(len(liger_object.adata_list))))
         
     genes_use = []
     for i in datasets_use:
         if capitalize:
+            liger_object.adata_list[i].obs['gene name'] = liger_object.adata_list[i].obs['gene name'].str.upper()
             
-        trx_per_cell = 
+        trx_per_cell = np.array(np.sum(liger_object.adata_list[i].X, axis=0)).flatten()
         # Each gene's mean expression level (across all cells)
         gene_expr_mean = 
         # Each gene's expression variance (across all cells)
@@ -482,7 +486,7 @@ def selectGenes(liger_object,
         liger_object.var_genes = genes_use
 
     return liger_object
-
+    """
 
 def scaleNotCenter(liger_object, 
                    remove_missing = True):
@@ -511,8 +515,14 @@ def scaleNotCenter(liger_object,
         >>> ligerex = selectGenes(ligerex) # select genes
         >>> ligerex = scaleNotCenter(ligerex)
     """
-    if 
+    for i in range(len(liger_object.adata_list)):
+        if isspmatrix(liger_object.adata_list[i].X):
+            liger_object.adata_list[i].layers['scale_data'] = scaleNot()
     
+    # TODO: Preserve sparseness later on (convert inside optimizeALS)
+    
+    if remove_missing:
+        liger_object = removeMissingObs(liger_object, slot_use='scale_data', use_cols=False)
     return liger_object
 
 
@@ -540,27 +550,28 @@ def removeMissingObs(liger_object,
     """
     removed = str(np.where(slot_use in ['raw_data', 'norm_data'] and use_cols == True, 'cells', 'genes'))
     expressed = str(np.where(removed == 'cells', ' any genes', ''))
-    data_type = liger_object.adata_list[i].obs['data type'][0]
     
     for i in range(len(liger_object.adata_list)):
+        data_type = liger_object.adata_list[i].uns['sample name']
         if slot_use == 'raw_data':
             filter_data = liger_object.adata_list[i].X
         elif slot_use == 'scale_data':
             filter_data = liger_object.adata_list[i].layers['scale_data']
         
         if use_cols:
-            missing = np.array(np.sum(filter_data, axis=0)).flatten()
+            missing = np.array(np.sum(filter_data, axis=0)).flatten() == 0
         else:
-            missing = np.array(np.sum(filter_data, axis=1)).flatten()
-        if len(missing) > 0:
-            print('Removing {} not expressing {} in {}.'.format(len(missing), removed, expressed, data_type))
+            missing = np.array(np.sum(filter_data, axis=1)).flatten() == 0
+        if np.sum(missing) > 0:
+            print('Removing {} {} not expressing{} in {}.'.format(np.sum(missing), removed, expressed, data_type))
             if use_cols:
-                # show gene name when the total of missing genes is less than 25
-                if len(missing) < 25:
+                # show gene name when the total of missing is less than 25
+                if np.sum(missing) < 25:
                     print(liger_object.adata_list[i].obs['gene name'][missing])
                 liger_object.adata_list[i] = liger_object.adata_list[i][:, ~missing].copy()
             else:
-                if len(missing) < 25:
+                # show cell name when the total of missing is less than 25
+                if np.sum(missing) < 25:
                     print(liger_object.adata_list[i].var['barcode'][missing])
                 liger_object.adata_list[i] = liger_object.adata_list[i][~missing, :].copy()
 
