@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import re
+import warnings
 import scipy.io
 import numpy as np
 import pandas as pd
@@ -29,7 +30,7 @@ class Liger(object):
         cell_data(): 
             Dataframe of cell attributes across all datasets (nrows equal to total number
             cells across all datasets)
-        var_genes(): 
+        var_genes(list): 
             Subset of informative genes shared across datasets to be used in matrix
             factorization
         H(list): 
@@ -376,7 +377,6 @@ def selectGenes(liger_object,
                 capitalize = False, 
                 do_plot = False,
                 cex_use = 0.3):
-    pass
     """ Select a subset of informative genes
     
     This function identifies highly variable genes from each dataset and combines these gene sets
@@ -429,7 +429,7 @@ def selectGenes(liger_object,
         >>> ligerex = normalize(ligerex)
         >>> ligerex = selectGenes(ligerex) # use default selectGenes settings
         >>> ligerex = selectGenes(ligerex, var_thresh=0.8) # select a smaller subset of genes
-    
+    """
     if datasets_use is None:
         datasets_use = list(range(len(liger_object.adata_list)))
         
@@ -449,44 +449,59 @@ def selectGenes(liger_object,
             
         trx_per_cell = np.array(np.sum(liger_object.adata_list[i].X, axis=0)).flatten()
         # Each gene's mean expression level (across all cells)
-        gene_expr_mean = 
+        gene_expr_mean = np.array(np.mean(liger_object.adata_list[i].layers['norm_data'], axis=1)).flatten()
         # Each gene's expression variance (across all cells)
-        gene_expr_var = 
+        gene_expr_var = np.array(np.var(liger_object.adata_list[i].layers['norm_data'].toarray(), axis=1)).flatten()
         
-        nolan_constant = 
-        alphathresh_corrected = 
-        genemeanupper = 
-        basegenelower = 
+        nolan_constant = np.mean(1/trx_per_cell)
+        alphathresh_corrected = alpha_thresh / liger_object.adata_list[i].shape[0]
         
+        from scipy.stats import norm
+        genemeanupper = gene_expr_mean + norm.ppf(1 - alphathresh_corrected / 2) * np.sqrt(gene_expr_mean * nolan_constant / liger_object.adata_list[i].shape[1])
         
+        basegenelower = np.log10(gene_expr_mean * nolan_constant)
+        
+        def num_varGenes(x, num_genes_des):
+            # This function returns the difference between the desired number of genes and
+            # the number actually obtained when thresholded on x
+            y = np.sum(gene_expr_var / nolan_constant > genemeanupper & np.log10(gene_expr_var) > basegenelower + x)
+            return np.abs(num_genes_des - y)
         
         if num_genes is not None:
         # Optimize to find value of x which gives the desired number of genes for this dataset
         # if very small number of genes requested, var.thresh may need to exceed 1
             from scipy.optimize import minimize
+            optimized = optimize(fun=num_varGenes, tol=tol,)
+            var_thresh[i] = optimized.x
+            if var_thresh[i].shape[0] > 1:
+                warnings.warn('Returned number of genes for dataset {} differs from requested by {}. Lower tol or alpha_thresh for better results.'.format(i, optimized.x.shape[0])) 
+        select_gene = (gene_expr_var / nolan_constant > genemeanupper) & (np.log10(gene_expr_var) > basegenelower + var.thresh[i])
+        genes_new = liger_object.adata_list[i].obs['gene name'].to_numpy()[select_gene]
             
         if do_plot:
             
             
         if combine == 'union':
-            
+            genes_use = np.union1d(genes_use, genes_new)
+        
         if combine == 'intersect':
-            if len(genes_use) == 0:
+            if genes_use.shape[0] == 0:
                 genes_use = genes_new
-                
-            genes_use = 
+            genes_use = np.intersect1d(genes_use, genes_new)
             
             
         if not keep_unique:
             for i in range(len(liger_object.raw_data)):
+                genes_use = 
                 
-                
-        if len(genes_use == 0):
+        if genes_use.shape[0]:
+            
             
         liger_object.var_genes = genes_use
 
     return liger_object
-    """
+
+
 
 def scaleNotCenter(liger_object, 
                    remove_missing = True):
