@@ -9,4 +9,9 @@ setup(name='pyliger',
       license='MIT',
       packages=['pyliger'],
       keywords='LIGER',
+      install_requires=[
+              'pandas',
+              'numpy',
+              'anndata'
+              ],
       zip_safe=False)
