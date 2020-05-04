@@ -1,0 +1,9 @@
+# Compiled Python files
+__pycache__/
+*.pyc
+
+# OS generated files
+.DS_Store
+
+# Python egg metadata, regenerated from source files by setuptools.
+/*.egg-info
