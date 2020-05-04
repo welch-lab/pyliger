@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import re
+import time
 import warnings
 import scipy.io
 import numpy as np
@@ -459,7 +460,7 @@ def selectGenes(liger_object,
         liger_object(liger): 
             Object with var_genes attribute.
             
-    Example:
+    Usage:
         >>> adata1 = AnnData(np.arange(12).reshape((4, 3)))
         >>> adata2 = AnnData(np.arange(12).reshape((4, 3)))
         >>> ligerex = createLiger([adata1, adata2])
@@ -568,7 +569,7 @@ def scaleNotCenter(liger_object,
         liger_object(liger):
             Object with scale_data layer.
             
-    Example:
+    Usage:
         >>> adata1 = AnnData(np.arange(12).reshape((4, 3)))
         >>> adata2 = AnnData(np.arange(12).reshape((4, 3)))
         >>> ligerex = createLiger([adata1, adata2])
@@ -609,7 +610,7 @@ def removeMissingObs(liger_object,
         liger_object(liger): 
             object with modified raw_data (or chosen slot) (dataset names preserved).
         
-    Example:
+    Usage:
         >>> ligerex = removeMissingObs(ligerex)
     """
     removed = str(np.where(slot_use in ['raw_data', 'norm_data'] and use_cols == True, 'cells', 'genes'))
@@ -645,20 +646,152 @@ def removeMissingObs(liger_object,
 #######################################################################################
 #### Factorization
 
-# Perform iNMF on scaled datasets
-def optimizeALS_list(liger_object,
-                     k,
-                     value_lambda = 5.0,
-                     thresh = 1e-6,
-                     max_iters = 30,
-                     nrep = 1,
-                     H_init = None,
-                     W_init = None,
-                     V_init = None,
-                     rand_seed = 1,
-                     print_obj = False):
-    pass
-
+def optimizeALS(liger_object,
+                k,
+                value_lambda = 5.0,
+                thresh = 1e-6,
+                max_iters = 30,
+                nrep = 1,
+                H_init = None,
+                W_init = None,
+                V_init = None,
+                rand_seed = 1,
+                print_obj = False):
+    """ Perform iNMF on scaled datasets
+    
+    Perform integrative non-negative matrix factorization to return factorized H, W, and V matrices.
+    It optimizes the iNMF objective function using block coordinate descent (alternating non-negative
+    least squares), where the number of factors is set by k. TODO: include objective function
+    equation here in documentation (using deqn)
+    
+    For each dataset, this factorization produces an H matrix (cells by k), a V matrix (k by genes),
+    and a shared W matrix (k by genes). The H matrices represent the cell factor loadings.
+    W is held consistent among all datasets, as it represents the shared components of the metagenes
+    across datasets. The V matrices represent the dataset-specific components of the metagenes.
+    
+    Args:
+        liger_object(liger): 
+            Should normalize, select genes, and scale before calling.
+        k(int): 
+            Inner dimension of factorization (number of factors). Run suggestK to determine
+            appropriate value; a general rule of thumb is that a higher k will be needed for datasets with
+            more sub-structure.
+        value_lambda(float): optional, (default 5.0)
+            Regularization parameter. Larger values penalize dataset-specific effects more
+            strongly (ie. alignment should increase as lambda increases). Run suggestLambda to determine
+            most appropriate value for balancing dataset alignment and agreement.
+        thresh(float): optional, (default 1e-6)
+            Convergence threshold. Convergence occurs when |obj0-obj|/(mean(obj0,obj)) < thresh.
+        max_iters(int): optional, (default 30)
+            Maximum number of block coordinate descent iterations to perform
+        nrep(int): optional, (default 1)
+            Number of restarts to perform (iNMF objective function is non-convex, so taking the
+            best objective from multiple successive initializations is recommended). For easier
+            reproducibility, this increments the random seed by 1 for each consecutive restart, so future
+            factorizations of the same dataset can be run with one rep if necessary. 
+        H_init(): optional, (default None)
+            Initial values to use for H matrices.
+        W_init(): optional, (default None)
+            Initial values to use for W matrix.
+        V_init(): optional, (default None)
+            Initial values to use for V matrices.
+        rand_seed(seed): optional, (default 1)
+            Random seed to allow reproducible results
+        print_obj(bool): optional, (default False)
+            Print objective function values after convergence.
+        
+    Return:
+        liger_object(liger): 
+            liger object with H, W, and V attributes.
+            
+    Usage:
+        >>> adata1 = AnnData(np.arange(12).reshape((4, 3)))
+        >>> adata2 = AnnData(np.arange(12).reshape((4, 3)))
+        >>> ligerex = createLiger([adata1, adata2])
+        >>> ligerex = normalize(ligerex)
+        >>> ligerex = selectGenes(ligerex) # select genes
+        >>> ligerex = scaleNotCenter(ligerex)
+        >>> ligerex = optimizeALS(ligerex, k = 20, lambda = 5, nrep = 3) # get factorization using three restarts and 20 factors
+    """
+    for :
+        if :
+            raise ValueError('All values in "object" must be a matrix')
+    
+    E = liger_object
+    N = 
+    ns = 
+    if k >= :
+        raise ValueError('Select k lower than the number of cells in smallest dataset: {}'. format())
+        
+    tmp = 
+    g = 
+    if k >= g:
+        raise ValueError('Select k lower than the number of variable genes: {}'. format(g))
+        
+    W_m = csr_matrix()
+    V_m = []
+    for i in range(N):
+        V_m.append(csr_matrix())
+        
+    tmp = 
+    best_obj = np.Inf
+    run_stats = csr_matrix()
+    for i in range(1, nrep+1):
+        np.random.seed(seed = rand_seed + i - 1)
+        start_time = time.time()
+        W = 
+        V = []
+        for i in range(N):
+            V.append()
+        
+        H = []
+        for i in ns:
+            H.append()
+        
+        tmp = 
+        if W_init is not None:
+            W = W_init
+            
+        if V_init is not None:
+            V = V_init
+        
+        if H_init is not None:
+            H = H_init
+            
+        delta = 1
+        iters = 0
+        pb = 
+        sqrt_lambda = np.sqrt(value_lambda)
+        obj0 = 
+        
+        tmp = 
+        
+        while delta > thresh and iters < max_iters:
+            for i in range():
+                H =
+            
+            tmp = 
+            for i in range():
+                V = 
+                
+            tmp = 
+            W = 
+            
+            tmp =
+            obj = 
+            
+            
+        if print_obj:
+            print('Objective: {}'.format())
+        
+    print('Best results with seed {}.'.format(best_seed))
+    
+    liger_object.H = H_m
+    liger_object.V = V_m
+    liger_object.W = W_m
+    
+    return liger_object
+        
 
 # Perform factorization for new value of k
 def optimizeNewK(liger_object, k_new, value_lambda = None, thresh = 1e-4, max_iters = 100,
