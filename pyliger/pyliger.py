@@ -807,7 +807,7 @@ def iNMF_HALS(liger_object,
               rand_seed = 1,
               print_obj = False): 
     
-    def nonneg(x, eps=0):
+    def nonneg(x, eps=1e-16):
         x[x<eps] = eps
         return x
     
@@ -850,7 +850,6 @@ def iNMF_HALS(liger_object,
         
         # perform block coordinate descent
         while delta > thresh and iteration <= max_iters:
-            print(iteration)
             iter_start_time = time.time()
             
             VitVi = [V[i].transpose()@V[i] for i in range(num_samples)]
@@ -869,7 +868,6 @@ def iNMF_HALS(liger_object,
                 W_update_numerator = np.repeat(0, num_genes)
                 W_update_denominator = 0
                 for i in range(num_samples):
-                    print(((W + V[i])@HHt[i])[:,j])
                     W_update_numerator[:] = W_update_numerator[:] + XHt[i][:,j] - ((W + V[i])@HHt[i])[:,j]
                     W_update_denominator += HHt[i][j,j]
                 W[:,j] = nonneg(W[:,j] + W_update_numerator / W_update_denominator)
@@ -900,7 +898,7 @@ def iNMF_HALS(liger_object,
         num_rep += 1
         
     for i in range(num_samples):
-        liger_object.adata_list[i].varm['H'] = H[i]
+        liger_object.adata_list[i].varm['H'] = H[i].transpose()
         liger_object.adata_list[i].obsm['W'] = W
         liger_object.adata_list[i].obsm['V'] = V[i]
         
