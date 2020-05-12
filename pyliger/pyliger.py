@@ -813,27 +813,24 @@ def iNMF_HALS(liger_object,
     
     adata_list = liger_object.adata_list
     num_samples = len(adata_list)
-    
     num_cells = [adata_list[i].shape[1] for i in range(num_samples)]
-        
     num_genes = adata_list[0].shape[0]
     
     # set seed
     np.random.seed(seed = rand_seed)
-    
+
     # allow restarts
     num_rep = 0
     while num_rep < nrep:
         # initialization
-        V = [adata_list[i][:,np.random.choice(list(range(num_cells[i])), k)].copy() for i in range(num_samples)]
+        V = [adata_list[i].layers['scale_data'][:,np.random.choice(list(range(num_cells[i])), k)].toarray() for i in range(num_samples)]
         W = np.abs(np.random.uniform(0, 2, (num_genes, k)))
         H = [np.random.uniform(0, 2, (k, num_cells[i])) for i in range(num_samples)]
-        
+       
         # normalize columns of dictionaries
         W = W/np.sum(W, axis=0)
         for i in range(num_samples):
             V[i] = V[i]/np.sum(V[i], axis=0)
-                
         total_time = 0 # track the total amount of time used for learning
         delta = np.inf
         
@@ -843,26 +840,27 @@ def iNMF_HALS(liger_object,
         for i in range(num_samples):
             obj_train_approximation += np.linalg.norm(adata_list[i].layers['scale_data']-(W+V[i])@H[i])**2
             obj_train_penalty += np.linalg.norm(V[i]@H[i])**2
-            
+
         obj_train = obj_train_approximation + value_lambda*obj_train_penalty
 
         # print start information
-        print('Initial Training Obj: '.format(obj_train))
+        print('Initial Training Obj: {}'.format(obj_train))
             
         iteration = 1
         
         # perform block coordinate descent
         while delta > thresh and iteration <= max_iters:
+            print(iteration)
             iter_start_time = time.time()
             
             VitVi = [V[i].transpose()@V[i] for i in range(num_samples)]
             W_Vi = [W+V[i] for i in range(num_samples)]
             W_Vi_sq = [W_Vi[i].transpose()@W_Vi[i] for i in range(num_samples)]
             W_VitXi = [W_Vi[i].transpose()@adata_list[i].layers['scale_data'] for i in range(num_samples)]
-                    
+
             for i in range(num_samples):
                 for j in range(k):
-                    H[i][j,:] = nonneg((H[i][j,:]*W_Vi_sq[i][j,j] + W_VitXi[i][j,:] - (W_Vi_sq[i]@H[i][j,]))/(W_Vi_sq[i][j,j] + value_lambda * VitVi[i][j,j]))
+                    H[i][j,:] = nonneg((H[i][j,:]*W_Vi_sq[i][j,j] + W_VitXi[i][j,:] - (W_Vi_sq[i]@H[i])[j,:])/(W_Vi_sq[i][j,j] + value_lambda * VitVi[i][j,j]))
                     
             XHt = [adata_list[i].layers['scale_data']@H[i].transpose() for i in range(num_samples)]
             HHt = [H[i]@H[i].transpose() for i in range(num_samples)]
@@ -871,7 +869,8 @@ def iNMF_HALS(liger_object,
                 W_update_numerator = np.repeat(0, num_genes)
                 W_update_denominator = 0
                 for i in range(num_samples):
-                    W_update_numerator += XHt[i][:,j] - ((W + V[i])@HHt[i])[:,j]
+                    print(((W + V[i])@HHt[i])[:,j])
+                    W_update_numerator[:] = W_update_numerator[:] + XHt[i][:,j] - ((W + V[i])@HHt[i])[:,j]
                     W_update_denominator += HHt[i][j,j]
                 W[:,j] = nonneg(W[:,j] + W_update_numerator / W_update_denominator)
                 
