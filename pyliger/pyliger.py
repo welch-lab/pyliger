@@ -12,7 +12,7 @@ from scipy.sparse import csr_matrix, isspmatrix
 from anndata import AnnData
 import matplotlib.pyplot as plt
 
-from utilities import MergeSparseDataAll
+from .utilities import MergeSparseDataAll
 
 ## The LIGER Class
 class Liger(object):
@@ -220,7 +220,7 @@ def read10X(sample_dirs,
         elif data_type == 'atac':
             features = pd.read_csv(features_file, sep='\t', header=None).to_numpy()
             features = np.array([str(feature[0]) + ':' + str(feature[1]) + '-' + str(feature[2]) for feature in features])
-            row_names = pd.DataFrame(features, columns=['row name'])
+            row_names = pd.DataFrame(features, columns=['gene_name'])
         
 
         # split based on 10X datatype -- V3 has Gene Expression, Antibody Capture, CRISPR, CUSTOM
@@ -229,14 +229,14 @@ def read10X(sample_dirs,
         if features.shape[1] == 1: 
             sample_datatypes = np.array(['Chromatin Accessibility'])
             adata = AnnData(csr_matrix(rawdata), obs=row_names, var=col_names)
-            adata.uns['sample name'] = sample_names[i]
-            adata.uns['data type'] = 'Chromatin Accessibility'
+            adata.uns['sample_name'] = sample_names[i]
+            adata.uns['data_type'] = 'Chromatin Accessibility'
             datalist.append(adata)
         elif features.shape[1] < 3:
             sample_datatypes = np.array(['Gene Expression'])
             adata = AnnData(csr_matrix(rawdata), obs=row_names, var=col_names)
-            adata.uns['sample name'] = sample_names[i]
-            adata.uns['data type'] = 'Gene Expression'
+            adata.uns['sample_name'] = sample_names[i]
+            adata.uns['data_type'] = 'Gene Expression'
             datalist.append(adata)
         else:
             sample_datatypes = features[:,2]
@@ -247,23 +247,23 @@ def read10X(sample_dirs,
             for name in sample_datatypes:
                 idx = sample_datatypes == name
                 subset_row_names = row_names[idx]
-                subset_row_names = pd.DataFrame(subset_row_names, columns=['row name'])
+                subset_row_names = pd.DataFrame(subset_row_names, columns=['gene_name'])
                 subset_data = rawdata[:,sample_datatypes == name]
                 adata = AnnData(csr_matrix(subset_data), obs=subset_row_names, var=col_names)
-                adata.uns['sample name'] = sample_names[i]
-                adata.uns['data type'] = name
+                adata.uns['sample_name'] = sample_names[i]
+                adata.uns['data_type'] = name
                 datalist.append(adata)
                 
         # num_cells filter only for gene expression data
-        if num_cells is not None:
-            if 'Gene Expression' or 'Chromatin Accessibility' in sample_name and sample_name.shape[0] == 1:
-                data_label = sample_name.item()
-                cs = np.sum(samplelist[data_label], axis=0)
-                limit = samplelist[data_label].shape[1]
-                if num_cells[i] > limit:
-                    print('You selected more cells than are in matrix {}. Returning all {} cells.'.format(i, limit))
-                num_cells[i] = limit
-                samplelist[data_label] = np.flip(np.sort(samplelist[data_label]))[0:num_cells[i]]
+#        if num_cells is not None:
+#            if 'Gene Expression' or 'Chromatin Accessibility' in sample_datatypes and sample_datatypes.shape[0] == 1:
+#                data_label = sample_datatypes.item()
+#                cs = np.sum(samplelist[data_label], axis=0)
+#                limit = samplelist[data_label].shape[1]
+#                if num_cells[i] > limit:
+#                    print('You selected more cells than are in matrix {}. Returning all {} cells.'.format(i, limit))
+#                num_cells[i] = limit
+#                samplelist[data_label] = np.flip(np.sort(samplelist[data_label]))[0:num_cells[i]]
         
     
     return_dges = {}
@@ -348,7 +348,7 @@ def createLiger(adata_list,
                 print('Removing {} genes not expressed in any cells across merged datasets.'.format(np.sum(missing_genes)))
                 # show gene name when the total of missing genes is less than 25
                 if np.sum(missing_genes) < 25:
-                    print(merged_data.obs['row name'][missing_genes])
+                    print(merged_data.obs['gene_name'][missing_genes])
                 # save data after removing missing genes
                 merged_data = merged_data[~missing_genes,:].copy()
         # fill out raw_data matrices with union of genes across all datasets
@@ -371,7 +371,7 @@ def createLiger(adata_list,
         temp = pd.DataFrame(index=adata.var['barcodes'])
         temp['nUMI'] = np.array(np.sum(adata.X, axis=0)).flatten()
         temp['nGene'] = np.count_nonzero(adata.X.toarray(), axis=0)
-        temp['dataset'] = np.repeat(adata.uns['sample name'], adata.var['barcodes'].shape[0])
+        temp['dataset'] = np.repeat(adata.uns['sample_name'], adata.var['barcodes'].shape[0])
         liger_object.cell_data.append(temp)
     
     return liger_object
@@ -483,7 +483,7 @@ def selectGenes(liger_object,
     genes_use = np.array([])
     for i in datasets_use:
         if capitalize:
-            liger_object.adata_list[i].obs['row name'] = liger_object.adata_list[i].obs['row name'].str.upper()
+            liger_object.adata_list[i].obs['gene_name'] = liger_object.adata_list[i].obs['gene_name'].str.upper()
             
         trx_per_cell = np.array(np.sum(liger_object.adata_list[i].X, axis=0)).flatten()
         # Each gene's mean expression level (across all cells)
@@ -514,12 +514,12 @@ def selectGenes(liger_object,
                 warnings.warn('Returned number of genes for dataset {} differs from requested by {}. Lower tol or alpha_thresh for better results.'.format(i, optimized.x.shape[0])) 
 
         select_gene = (gene_expr_var / nolan_constant > genemeanupper) & (np.log10(gene_expr_var) > basegenelower + var_thresh[i])
-        genes_new = liger_object.adata_list[i].obs['row name'].to_numpy()[select_gene]
+        genes_new = liger_object.adata_list[i].obs['gene_name'].to_numpy()[select_gene]
         
         # TODO: needs to be improved
         if do_plot:
             plt.plot(np.log10(gene_expr_mean), np.log10(gene_expr_var))
-            plt.title(liger_object.adata_list[i].uns['sample name'])
+            plt.title(liger_object.adata_list[i].uns['sample_name'])
             plt.xlabel('Gene Expression Mean (log10)')
             plt.ylabel('Gene Expression Variance (log10)')
             
@@ -539,7 +539,7 @@ def selectGenes(liger_object,
           
     if not keep_unique:
         for i in range(len(liger_object.adata_list)):
-            genes_use = np.intersect1d(genes_use, liger_object.adata_list[i].obs['row name'])    
+            genes_use = np.intersect1d(genes_use, liger_object.adata_list[i].obs['gene_name'])    
     
     if genes_use.shape[0] == 0:
         warnings.warn('No genes were selected; lower var_thresh values or choose "union" for combine parameter')
@@ -578,7 +578,7 @@ def scaleNotCenter(liger_object,
         >>> ligerex = scaleNotCenter(ligerex)
     """
     for i in range(len(liger_object.adata_list)):
-        idx = liger_object.adata_list[i].obs['row name'].isin(liger_object.var_genes).to_numpy()
+        idx = liger_object.adata_list[i].obs['gene_name'].isin(liger_object.var_genes).to_numpy()
         liger_object.adata_list[i] = liger_object.adata_list[i][idx,].copy()
         
         if isspmatrix(liger_object.adata_list[i].X):
@@ -617,7 +617,7 @@ def removeMissingObs(liger_object,
     expressed = str(np.where(removed == 'cells', ' any genes', ''))
     
     for i in range(len(liger_object.adata_list)):
-        data_type = liger_object.adata_list[i].uns['sample name']
+        data_type = liger_object.adata_list[i].uns['sample_name']
         if slot_use == 'raw_data':
             filter_data = liger_object.adata_list[i].X
         elif slot_use == 'scale_data':
@@ -632,7 +632,7 @@ def removeMissingObs(liger_object,
             if use_cols:
                 # show gene name when the total of missing is less than 25
                 if np.sum(missing) < 25:
-                    print(liger_object.adata_list[i].obs['row name'][missing])
+                    print(liger_object.adata_list[i].obs['gene_name'][missing])
                 liger_object.adata_list[i] = liger_object.adata_list[i][:, ~missing].copy()
             else:
                 # show cell name when the total of missing is less than 25
@@ -713,6 +713,7 @@ def optimizeALS(liger_object,
         >>> ligerex = scaleNotCenter(ligerex)
         >>> ligerex = optimizeALS(ligerex, k = 20, lambda = 5, nrep = 3) # get factorization using three restarts and 20 factors
     """
+    """
     for :
         if :
             raise ValueError('All values in "object" must be a matrix')
@@ -791,7 +792,120 @@ def optimizeALS(liger_object,
     liger_object.W = W_m
     
     return liger_object
+    """
+    pass
+
+def iNMF_HALS(liger_object,
+              k,
+              value_lambda = 5.0,
+              thresh = 1e-6,
+              max_iters = 30,
+              nrep = 1,
+              H_init = None,
+              W_init = None,
+              V_init = None,
+              rand_seed = 1,
+              print_obj = False): 
+    
+    def nonneg(x, eps=0):
+        x[x<eps] = eps
+        return x
+    
+    adata_list = liger_object.adata_list
+    num_samples = len(adata_list)
+    
+    num_cells = [adata_list[i].shape[1] for i in range(num_samples)]
         
+    num_genes = adata_list[0].shape[0]
+    
+    # set seed
+    np.random.seed(seed = rand_seed)
+    
+    # allow restarts
+    num_rep = 0
+    while num_rep < nrep:
+        # initialization
+        V = [adata_list[i][:,np.random.choice(list(range(num_cells[i])), k)].copy() for i in range(num_samples)]
+        W = np.abs(np.random.uniform(0, 2, (num_genes, k)))
+        H = [np.random.uniform(0, 2, (k, num_cells[i])) for i in range(num_samples)]
+        
+        # normalize columns of dictionaries
+        W = W/np.sum(W, axis=0)
+        for i in range(num_samples):
+            V[i] = V[i]/np.sum(V[i], axis=0)
+                
+        total_time = 0 # track the total amount of time used for learning
+        delta = np.inf
+        
+        # initial training obj
+        obj_train_approximation = 0
+        obj_train_penalty = 0
+        for i in range(num_samples):
+            obj_train_approximation += np.linalg.norm(adata_list[i].layers['scale_data']-(W+V[i])@H[i])**2
+            obj_train_penalty += np.linalg.norm(V[i]@H[i])**2
+            
+        obj_train = obj_train_approximation + value_lambda*obj_train_penalty
+
+        # print start information
+        print('Initial Training Obj: '.format(obj_train))
+            
+        iteration = 1
+        
+        # perform block coordinate descent
+        while delta > thresh and iteration <= max_iters:
+            iter_start_time = time.time()
+            
+            VitVi = [V[i].transpose()@V[i] for i in range(num_samples)]
+            W_Vi = [W+V[i] for i in range(num_samples)]
+            W_Vi_sq = [W_Vi[i].transpose()@W_Vi[i] for i in range(num_samples)]
+            W_VitXi = [W_Vi[i].transpose()@adata_list[i].layers['scale_data'] for i in range(num_samples)]
+                    
+            for i in range(num_samples):
+                for j in range(k):
+                    H[i][j,:] = nonneg((H[i][j,:]*W_Vi_sq[i][j,j] + W_VitXi[i][j,:] - (W_Vi_sq[i]@H[i][j,]))/(W_Vi_sq[i][j,j] + value_lambda * VitVi[i][j,j]))
+                    
+            XHt = [adata_list[i].layers['scale_data']@H[i].transpose() for i in range(num_samples)]
+            HHt = [H[i]@H[i].transpose() for i in range(num_samples)]
+
+            for j in range(k):
+                W_update_numerator = np.repeat(0, num_genes)
+                W_update_denominator = 0
+                for i in range(num_samples):
+                    W_update_numerator += XHt[i][:,j] - ((W + V[i])@HHt[i])[:,j]
+                    W_update_denominator += HHt[i][j,j]
+                W[:,j] = nonneg(W[:,j] + W_update_numerator / W_update_denominator)
+                
+            # update (Di).k
+            for j in range(k):
+                for i in range(num_samples):
+                    V[i][:,j] = nonneg(V[i][:,j] / (1 + value_lambda) + (XHt[i][:,j]-((W+V[i])@HHt[i][:,j])/((1+value_lambda)*HHt[i][j,j])))
+                    
+            total_time += (time.time()-iter_start_time)
+            
+            # training obj
+            obj_train_prev = obj_train
+            obj_train_approximation = 0
+            obj_train_penalty = 0
+            for i in range(num_samples):
+                obj_train_approximation += np.linalg.norm(adata_list[i].layers['scale_data'] - (W + V[i])@H[i])**2
+                obj_train_penalty += np.linalg.norm(V[i]@H[i])**2
+            obj_train = obj_train_approximation + value_lambda*obj_train_penalty
+            delta = np.absolute(obj_train_prev - obj_train)/((obj_train_prev + obj_train)/2)
+            
+            
+            # test obj
+            print('Iter: {}, Total time: {}, Obj Delta: {}'.format(iteration, total_time, delta))
+            
+            iteration += 1
+            
+        num_rep += 1
+        
+    for i in range(num_samples):
+        liger_object.adata_list[i].varm['H'] = H[i]
+        liger_object.adata_list[i].obsm['W'] = W
+        liger_object.adata_list[i].obsm['V'] = V[i]
+        
+    return liger_object
 
 # Perform factorization for new value of k
 def optimizeNewK(liger_object, k_new, value_lambda = None, thresh = 1e-4, max_iters = 100,
