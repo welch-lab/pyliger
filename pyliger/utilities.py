@@ -61,3 +61,11 @@ def MergeSparseDataAll(adata_list, library_names = None):
         merged_adata = merged_adata.concatenate(adata.T, join='inner')
     
     return merged_adata.T
+
+def refine_clusts_knn(H, clusts, k, eps=0.1):
+    for i in range(len(Hs)):
+        clusts_H = clusters
+        H_knn = 
+        new_clusts = 
+        
+    return clusts

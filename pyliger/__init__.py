@@ -1,1 +1,1 @@
-from .pyliger import createLiger, normalize, selectGenes, scaleNotCenter, iNMF_HALS
+from .preprocessing import createLiger, normalize, selectGenes, scaleNotCenterfrom .factorization import iNMF_HALSfrom .quantile_align import quantile_norm
