@@ -1,6 +1,8 @@
 import time
 import numpy as np
 
+from .utilities import nonneg
+
 #######################################################################################
 #### Factorization
 
@@ -160,11 +162,50 @@ def iNMF_HALS(liger_object,
               max_iters = 25,
               nrep = 1,
               rand_seed = 1): 
+    """Perform iNMF on scaled datasets using HALS method
     
-    def nonneg(x, eps=1e-16):
-        x[x<eps] = eps
-        return x
-    
+
+    Parameters
+    ----------
+    liger_object : liger object
+        Should normalize, select genes, and scale before calling.
+    k : int, optional
+        Inner dimension of factorization (number of factors). Run suggestK to determine
+        appropriate value; a general rule of thumb is that a higher k will be needed for datasets with
+        more sub-structure (the default is 20).
+    value_lambda : float, optional
+        Regularization parameter. Larger values penalize dataset-specific effects more
+        strongly (ie. alignment should increase as lambda increases). Run suggestLambda to determine
+        most appropriate value for balancing dataset alignment and agreement (the default is 5.0).
+    thresh : float, optional
+        Convergence threshold. Convergence occurs when |obj0-obj|/(mean(obj0,obj)) < thresh
+        (the default is 1e-4).
+    max_iters : int, optional
+        Maximum number of block coordinate descent iterations to perform (the default is 25).
+    nrep : int, optional
+        Number of restarts to perform (iNMF objective function is non-convex, so taking the
+        best objective from multiple successive initializations is recommended). For easier
+        reproducibility, this increments the random seed by 1 for each consecutive restart, so future
+        factorizations of the same dataset can be run with one rep if necessary (the default is 1).
+    rand_seed : int, optional
+        Random seed to allow reproducible results (the default is 1).
+
+    Returns
+    -------
+    liger_object : liger object
+        liger object with H, W, and V annotations.
+
+    Examples
+    --------
+    >>> adata1 = AnnData(np.arange(12).reshape((4, 3)))
+    >>> adata2 = AnnData(np.arange(12).reshape((4, 3)))
+    >>> ligerex = createLiger([adata1, adata2])
+    >>> ligerex = normalize(ligerex)
+    >>> ligerex = selectGenes(ligerex) # select genes
+    >>> ligerex = scaleNotCenter(ligerex)
+    >>> ligerex = iNMF_HALS(ligerex, k = 20, lambda = 5, nrep = 3)
+    """
+
     adata_list = liger_object.adata_list
     num_samples = len(adata_list)
     num_cells = [adata_list[i].shape[1] for i in range(num_samples)]
