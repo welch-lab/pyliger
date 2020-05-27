@@ -69,3 +69,8 @@ def refine_clusts_knn(H, clusts, k, eps=0.1):
         new_clusts = 
         
     return clusts
+
+def nonneg(x, eps=1e-16):
+    """ Given a input matrix, set all negative values to be zero """
+    x[x<eps] = eps
+    return x
