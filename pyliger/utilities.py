@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from anndata import AnnData
+from sklearn.neighbors import NearestNeighbors
 
 def MergeSparseDataAll(adata_list, library_names = None):
     """ Function to merage all sparse data into a single one
@@ -63,12 +64,31 @@ def MergeSparseDataAll(adata_list, library_names = None):
     return merged_adata.T
 
 def refine_clusts_knn(H, clusts, k, eps=0.1):
-    for i in range(len(Hs)):
-        clusts_H = clusters
-        H_knn = 
-        new_clusts = 
+    """ helper function for refining clusers by KNN related to function quantile_norm """
         
+    neigh = NearestNeighbors(n_neighbors=k, radius=0, algorithm='kd_tree')
+    neigh.fit(H)
+    
+    H_knn = neigh.kneighbors(H, n_neighbors=k, return_distance=False)
+    
+    # equal to cluster_vote function in Rcpp
+    for i in range(H_knn.shape[0]):
+        clust_counts = {}
+        for j in range(k):
+            if clusts[H_knn[i,j]] not in clust_counts:
+                clust_counts[H_knn[i,j]] = 1
+            else:
+                clust_counts[H_knn[i,j]] += 1
+        max_clust = -1
+        max_count = 0
+        for key, value in clust_counts.items():
+            if value > max_count:
+                max_clust = key
+                max_count = value
+        clusts[i] = max_clust
+    
     return clusts
+
 
 def nonneg(x, eps=1e-16):
     """ Given a input matrix, set all negative values to be zero """
