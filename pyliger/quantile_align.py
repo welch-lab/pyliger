@@ -1,5 +1,7 @@
+import time
 import numpy as np
 import pandas as pd
+from scipy import interpolate
 
 from .utilities import refine_clusts_knn
 #######################################################################################
@@ -61,8 +63,8 @@ def quantile_norm(liger_object,
     liger_object : liger
         liger_object with 'H_norm' and 'clusters' attributes.
 
-    Usage
-    -----
+    Examples
+    --------
     ligerex = quantile_norm(ligerex) # do basic quantile alignment
     ligerex = quantile_norm(ligerex, resolution = 1.2) # higher resolution for more clusters (note that SNF is conserved)
     ligerex = quantile_norm(ligerex, knn_k = 15, resolution = 1.2) # change knn_k for more fine-grained local clustering
@@ -91,12 +93,12 @@ def quantile_norm(liger_object,
     
     # Max factor assignment
     clusters = []
-    col_name = []
+    col_names = []
     for i in range(num_samples):
-        # scale the H matrix by columns
+        # scale the H matrix by columns, equal to scale_columns_fast in Rcpp
         scale_H = (Hs[i]-np.mean(Hs[i], axis=0))/np.std(Hs[i], axis=0, ddof=1)
         
-        # get the index of maximum value for each cell
+        # get the index of maximum value for each cell, equal to max_factor in Rcpp
         clusts = np.argmax(scale_H, axis=1)
         
         # increase robustness of cluster assignments using knn graph
@@ -111,33 +113,36 @@ def quantile_norm(liger_object,
         for j in range(num_clusters):
             cells2 = clusters[k] == j
             cells1 = clusters[ref_dataset_idx] == j
-            for i in range(dims):
+            for i in range(num_clusters):
                 num_cells2 = np.sum(cells2)
                 num_cells1 = np.sum(cells1)
-                if num_cells1 < min_cells and num_cells2 < min_cells:
+                
+                # skip clusters having too less cells
+                if num_cells1 and num_cells2 < min_cells:
                     continue
+                
                 if num_cells2 == 1:
                     Hs[k][cells2, i] = np.mean(Hs[ref_dataset_idx][cells1,i])
                     continue
-                if num_cells2 > max_sample and num_cells1 > max_sample:
-                    q2 = np.quantile(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)], np.linspace(0,1,num=quantiles))
-                    q1 = np.quantile(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles))
-                else:
-                    q2 = np.quantile(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)], np.linspace(0,1,num=quantiles))
-                    q1 = np.quantile(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles))
-                if np.sum(q1) == 0 and np.sum(q2) and len(np.unique(q1)) < 2 and len(np.unique(q2)) < 2:
+                
+                # maxiumn number of cells used for quantile normalization
+                q2 = np.quantile(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)], np.linspace(0,1,num=quantiles))
+                q1 = np.quantile(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles))
+                
+                if np.sum(q1) == 0 and np.sum(q2) == 0 and len(np.unique(q1)) < 2 and len(np.unique(q2)) < 2:
                     new_vals = np.repeat(0, num_cells2)
                 else:
-                    warp_func = 
-                    new_vals = 
-                Hs[k][cells, i] = new_vals
+                    warp_func = interpolate.interp1d(q2, q1)
+                    new_vals = warp_func(Hs[k][cells2, i])
+                Hs[k][cells2, i] = new_vals
                 
     # combine clusters into one
     clusters = np.array(clusters).flatten()
-    col_name = np.array(col_name).flatten()
+    col_names = np.array(col_names).flatten()
+    
     # assign clusters and H_norm attributes to liger_object
-    liger_object.clusters = pd.DataFrame(labels, columns=col_names)
-    liger_object
+    liger_object.clusters = pd.DataFrame(clusters, columns=col_names)
+    liger_object.H_norm = np.array(Hs).flatten()
         
     return liger_object
 
@@ -158,56 +163,83 @@ def louvainCluster(liger_object,
 
     Parameters
     ----------
-    liger_object : liger
+    liger_object : liger object
         Should run quantile_norm before calling.
-    resolution : TYPE, optional
-        DESCRIPTION. The default is 1.0.
-    k : TYPE, optional
-        DESCRIPTION. The default is 20.
-    prune : TYPE, optional
-        DESCRIPTION. The default is 1 / 15.
-    eps : TYPE, optional
-        DESCRIPTION. The default is 0.1.
-    nRandomStarts : TYPE, optional
-        DESCRIPTION. The default is 10.
-    nIterations : TYPE, optional
-        DESCRIPTION. The default is 100.
-    random_seed : TYPE, optional
-        DESCRIPTION. The default is 1.
+    resolution : float, optional
+        Value of the resolution parameter, use a value above (below) 1.0 if you want 
+        to obtain a larger (smaller) number of communities (the default is 1.0).
+    k : int, optional
+        The maximum number of nearest neighbours to compute (the default is 20).
+    prune : float, optional
+        Sets the cutoff for acceptable Jaccard index when
+        computing the neighborhood overlap for the SNN construction. Any edges with
+        values less than or equal to this will be set to 0 and removed from the SNN
+        graph. Essentially sets the strigency of pruning (0 --- no pruning, 1 ---
+        prune everything) (the default is 1/15).
+    eps : float, optional
+        The error bound of the nearest neighbor search (the default is 0.1).
+    nRandomStarts : int, optional
+        Number of random starts (the default is 10).
+    nIterations : int, optional
+        Maximal number of iterations per random start (the default is 100).
+    random_seed : int, optional
+        Seed of the random number generator (the default is 1).
 
     Returns
     -------
-    None.
-
-    """
-
-# Impute the query cell expression matrix
-def imputeKNN(liger_object, reference, queries, knn_k = 20, weight = True, norm = True, scale = False):
+    liger_object : liger object
+        object with refined 'clusters' attribute.
+        
+    Examples
+    --------
+    >>> ligerex <- louvainCluster(ligerex, resulotion = 0.3) # liger object, factorization complete
     """
     
+    current_time = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
+    output_path = 'edge_' + current_time + '.txt'
+    
+    
+
+
+def imputeKNN(liger_object, 
+              reference, 
+              queries, 
+              knn_k = 20,
+              weight = True, 
+              norm = True, 
+              scale = False):
+    """Impute the query cell expression matrix
+    
+    Impute query features from a reference dataset using KNN.
 
     Parameters
     ----------
-    liger_object : TYPE
-        DESCRIPTION.
-    reference : TYPE
-        DESCRIPTION.
+    liger_object : liger obect
+        object.
+    reference : str
+        Dataset containing values to impute into query dataset(s).
     queries : TYPE
-        DESCRIPTION.
-    knn_k : TYPE, optional
-        DESCRIPTION. The default is 20.
-    weight : TYPE, optional
-        DESCRIPTION. The default is True.
-    norm : TYPE, optional
-        DESCRIPTION. The default is True.
-    scale : TYPE, optional
-        DESCRIPTION. The default is False.
+        Dataset to be augmented by imputation. If not specified, will pass in all datasets.
+    knn_k : int, optional
+        The maximum number of nearest neighbors to search (the default is 20).
+    weight : bool, optional
+        Whether to use KNN distances as weight matrix (the default is False).
+    norm : bool, optional
+        Whether normalize the imputed data with default parameters (the default is True).
+    scale : bool, optional
+        Whether scale but not center the imputed data with default parameters (default True).
 
     Returns
     -------
-    None.
-
+    liger_object : liger obect
+        object with raw data in raw.data slot replaced by imputed data (genes by cells)
+        # TODO: may not be replaced?
+    
+    Examples
+    --------
+    >>> 
     """
+    pass
 
 # Perform Wilcoxon rank-sum test
 def runWilcoxon(liger_object, compare_method, data_use = "all"):
