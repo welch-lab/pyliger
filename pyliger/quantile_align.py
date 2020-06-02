@@ -139,9 +139,9 @@ def quantile_norm(liger_object,
     # combine clusters into one
     clusters = np.array(clusters).flatten()
     col_names = np.array(col_names).flatten()
-    
+
     # assign clusters and H_norm attributes to liger_object
-    liger_object.clusters = pd.DataFrame(clusters, columns=col_names)
+    liger_object.clusters = pd.DataFrame(clusters, index=col_names)
     liger_object.H_norm = np.array(Hs).flatten()
         
     return liger_object
