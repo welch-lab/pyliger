@@ -70,15 +70,14 @@ def refine_clusts_knn(H, clusts, k, eps=0.1):
     neigh.fit(H)
     
     H_knn = neigh.kneighbors(H, n_neighbors=k, return_distance=False)
-    
     # equal to cluster_vote function in Rcpp
     for i in range(H_knn.shape[0]):
         clust_counts = {}
         for j in range(k):
             if clusts[H_knn[i,j]] not in clust_counts:
-                clust_counts[H_knn[i,j]] = 1
+                clust_counts[clusts[H_knn[i,j]]] = 1
             else:
-                clust_counts[H_knn[i,j]] += 1
+                clust_counts[clusts[H_knn[i,j]]] += 1
         max_clust = -1
         max_count = 0
         for key, value in clust_counts.items():
@@ -86,7 +85,6 @@ def refine_clusts_knn(H, clusts, k, eps=0.1):
                 max_clust = key
                 max_count = value
         clusts[i] = max_clust
-    
     return clusts
 
 
