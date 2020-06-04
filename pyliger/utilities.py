@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from anndata import AnnData
+from annoy import AnnoyIndex
 from sklearn.neighbors import NearestNeighbors
 
 def MergeSparseDataAll(adata_list, library_names = None):
@@ -63,13 +64,16 @@ def MergeSparseDataAll(adata_list, library_names = None):
     
     return merged_adata.T
 
-def refine_clusts_knn(H, clusts, k, eps=0.1):
+def refine_clusts_knn(H, clusts, k, num_trees):
     """ helper function for refining clusers by KNN related to function quantile_norm """
-        
+    
+    """  
+    # implementation using sklearn NearestNeighbors 
     neigh = NearestNeighbors(n_neighbors=k, radius=0, algorithm='kd_tree')
     neigh.fit(H)
     
     H_knn = neigh.kneighbors(H, n_neighbors=k, return_distance=False)
+    
     # equal to cluster_vote function in Rcpp
     for i in range(H_knn.shape[0]):
         clust_counts = {}
@@ -78,6 +82,41 @@ def refine_clusts_knn(H, clusts, k, eps=0.1):
                 clust_counts[clusts[H_knn[i,j]]] = 1
             else:
                 clust_counts[clusts[H_knn[i,j]]] += 1
+        max_clust = -1
+        max_count = 0
+        for key, value in clust_counts.items():
+            if value > max_count:
+                max_clust = key
+                max_count = value
+        clusts[i] = max_clust
+    """
+    # implementation using annoy library
+    num_observations = H.shape[0]
+    if num_trees is None:
+        if num_observations < 100000:
+            num_trees = 10
+        elif num_observations < 1000000:
+            num_trees = 20
+        elif num_observations < 5000000:
+            num_trees = 50
+        else:
+            num_trees = 100     
+
+    t = AnnoyIndex(k, 'angular')
+    for i in range(num_observations):
+        t.add_item(i, H[i])
+    
+    t.build(num_trees)
+    
+    # equal to cluster_vote function in Rcpp
+    for i in range(num_observations):
+        H_knn = t.get_nns_by_vector(H[i], k)
+        clust_counts = {}
+        for j in range(k):
+            if clusts[H_knn[j]] not in clust_counts:
+                clust_counts[clusts[H_knn[j]]] = 1
+            else:
+                clust_counts[clusts[H_knn[j]]] += 1
         max_clust = -1
         max_count = 0
         for key, value in clust_counts.items():
