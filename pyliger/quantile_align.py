@@ -14,7 +14,7 @@ def quantile_norm(liger_object,
                   dims_use = None, 
                   do_center = False, 
                   max_sample = 1000, 
-                  eps = 0.9, 
+                  num_trees = None, 
                   refine_knn = True,
                   knn_k = 20):
     """Quantile align (normalize) factor loadings
@@ -35,28 +35,34 @@ def quantile_norm(liger_object,
     ----------
     liger_object : liger
         Should run optimizeALS before calling.
-    quantiles : int, optional, (default 50)
-        Number of quantiles to use for quantile normalization.
-    ref_dataset : str, optional, (default None)
+    quantiles : int, optional
+        Number of quantiles to use for quantile normalization (the default is 50).
+    ref_dataset : str, optional
         Name of dataset to use as a "reference" for normalization. By default,
-        the dataset with the largest number of cells is used.
-    min_cells : int, optional, (default 20)
-        Minimum number of cells to consider a cluster shared across datasets.
-    dims_use : list, optional, (default list(range(liger_object.adata_list[0].varm['H'].shape[1])))
-        Indices of factors to use for shared nearest factor determination.
-    do_center : bool, optional, (default False)
+        the dataset with the largest number of cells is used (the default is None).
+    min_cells : int, optional
+        Minimum number of cells to consider a cluster shared across datasets
+        (the default is 20).
+    dims_use : list, optional
+        Indices of factors to use for shared nearest factor determination
+        (the default is list(range(liger_object.adata_list[0].varm['H'].shape[1]))).
+    do_center : bool, optional
         Centers the data when scaling factors (useful for less sparse modalities like
-        methylation data).
-    max_sample : int, optional, (default 1000)
+        methylation data) (the default is False).
+    max_sample : int, optional
         Maximum number of cells used for quantile normalization of each cluster 
-        and factor.
-    eps : float, optional, (default 0.9)
-        The error bound of the nearest neighbor search. Lower values give more 
-        accurate nearest neighbor graphs but take much longer to computer.
-    refine_knn : bool, optional, (default True)
-        whether to increase robustness of cluster assignments using KNN graph.
-    knn_k : int, optional, (default 20)
-        Number of nearest neighbors for within-dataset knn graph. 
+        and factor (the default is 1000).
+    num_trees : int, optional
+        The number of trees used by the approximate nearest neighbor search. 
+        Larger number of trees give more precision but consume more memory.
+        According to largeVis, they use 10 trees for datasets has less than 100,000
+        observations, 20 trees for datasets has less than 1,000,000 observations,
+        50 trees for datasets up to 5,000,000 and 100 trees otherwise (the default is None).
+    refine_knn : bool, optional
+        whether to increase robustness of cluster assignments using KNN graph
+        (the default is True).
+    knn_k : int, optional
+        Number of nearest neighbors for within-dataset knn graph (the default is 20). 
 
     Returns
     -------
@@ -81,7 +87,7 @@ def quantile_norm(liger_object,
             if liger_object.adata_list[i].uns['sample_name'] == ref_dataset:
                 ref_dataset_idx = i
                 break
-    
+    # TODO
     # set indices of factors
     if dims_use is None:
         use_these_factors = list(range(liger_object.adata_list[0].varm['H'].shape[1]))
@@ -103,22 +109,23 @@ def quantile_norm(liger_object,
         
         # increase robustness of cluster assignments using knn graph
         if refine_knn:
-            clusts = refine_clusts_knn(Hs[i], clusts, k=knn_k, eps=eps)
+            clusts = refine_clusts_knn(Hs[i], clusts, k=knn_k, num_trees=num_trees)
             
         clusters.append(clusts)
         col_names.append(liger_object.adata_list[i].var['barcodes'])
-
+    
     # Perform quantile alignment
     for k in range(num_samples):
         for j in range(num_clusters):
             cells2 = clusters[k] == j
             cells1 = clusters[ref_dataset_idx] == j
+
             for i in range(num_clusters):
                 num_cells2 = np.sum(cells2)
                 num_cells1 = np.sum(cells1)
-                
+               
                 # skip clusters having too less cells
-                if num_cells1 and num_cells2 < min_cells:
+                if num_cells1 or num_cells2 < min_cells:
                     continue
                 
                 if num_cells2 == 1:
@@ -129,20 +136,23 @@ def quantile_norm(liger_object,
                 q2 = np.quantile(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)], np.linspace(0,1,num=quantiles))
                 q1 = np.quantile(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles))
                 
-                if np.sum(q1) == 0 and np.sum(q2) == 0 and len(np.unique(q1)) < 2 and len(np.unique(q2)) < 2:
+                if np.sum(q1) == 0 or np.sum(q2) == 0 or len(np.unique(q1)) < 2 or len(np.unique(q2)) < 2:
                     new_vals = np.repeat(0, num_cells2)
                 else:
                     warp_func = interpolate.interp1d(q2, q1)
                     new_vals = warp_func(Hs[k][cells2, i])
                 Hs[k][cells2, i] = new_vals
-                
+        if k == 0:
+            H_norm = Hs[k]
+        else:
+            H_norm = np.concatenate((H_norm, Hs[k]), axis=0)
     # combine clusters into one
     clusters = np.array(clusters).flatten()
     col_names = np.array(col_names).flatten()
-
+    
     # assign clusters and H_norm attributes to liger_object
     liger_object.clusters = pd.DataFrame(clusters, index=col_names)
-    liger_object.H_norm = np.array(Hs).flatten()
+    liger_object.H_norm = pd.DataFrame(H_norm, index=col_names)
         
     return liger_object
 
