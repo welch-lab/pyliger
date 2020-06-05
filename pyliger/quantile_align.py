@@ -2,6 +2,7 @@ import time
 import numpy as np
 import pandas as pd
 from scipy import interpolate
+from numba import jit
 
 from .utilities import refine_clusts_knn
 #######################################################################################
@@ -16,7 +17,8 @@ def quantile_norm(liger_object,
                   max_sample = 1000, 
                   num_trees = None, 
                   refine_knn = True,
-                  knn_k = 20):
+                  knn_k = 20,
+                  rand_seed = 1):
     """Quantile align (normalize) factor loadings
     
     This process builds a shared factor neighborhood graph to jointly cluster cells, then quantile
@@ -63,6 +65,8 @@ def quantile_norm(liger_object,
         (the default is True).
     knn_k : int, optional
         Number of nearest neighbors for within-dataset knn graph (the default is 20). 
+    rand_seed : int, optional
+        Random seed to allow reproducible results (the default is 1).
 
     Returns
     -------
@@ -75,6 +79,7 @@ def quantile_norm(liger_object,
     ligerex = quantile_norm(ligerex, resolution = 1.2) # higher resolution for more clusters (note that SNF is conserved)
     ligerex = quantile_norm(ligerex, knn_k = 15, resolution = 1.2) # change knn_k for more fine-grained local clustering
     """
+    np.random.seed(rand_seed)
     
     num_samples = len(liger_object.adata_list)
     
@@ -87,14 +92,16 @@ def quantile_norm(liger_object,
             if liger_object.adata_list[i].uns['sample_name'] == ref_dataset:
                 ref_dataset_idx = i
                 break
-    # TODO
+
     # set indices of factors
     if dims_use is None:
         use_these_factors = list(range(liger_object.adata_list[0].varm['H'].shape[1]))
     else:
         use_these_factors = dims_use
     
-    Hs = [adata.varm['H'] for adata in liger_object.adata_list]
+    # applied use_these_factors to Hs
+    #Hs = [adata.varm['H'][:,use_these_factors] for adata in liger_object.adata_list]
+    Hs = [np.loadtxt('/Users/lulu/Desktop/result_H1.txt')[:,use_these_factors], np.loadtxt('/Users/lulu/Desktop/result_H2.txt')[:,use_these_factors]]
     num_clusters = Hs[ref_dataset_idx].shape[1]
     
     # Max factor assignment
@@ -102,8 +109,11 @@ def quantile_norm(liger_object,
     col_names = []
     for i in range(num_samples):
         # scale the H matrix by columns, equal to scale_columns_fast in Rcpp
-        scale_H = (Hs[i]-np.mean(Hs[i], axis=0))/np.std(Hs[i], axis=0, ddof=1)
-        
+        if do_center:
+            scale_H = (Hs[i]-np.mean(Hs[i], axis=0))/np.std(Hs[i], axis=0, ddof=1)
+        else:
+            scale_H = Hs[i]/(np.sqrt(np.sum(np.square(Hs[i]), axis=0))/(Hs[i].shape[0]-1))
+
         # get the index of maximum value for each cell, equal to max_factor in Rcpp
         clusts = np.argmax(scale_H, axis=1)
         
@@ -114,6 +124,9 @@ def quantile_norm(liger_object,
         clusters.append(clusts)
         col_names.append(liger_object.adata_list[i].var['barcodes'])
     
+    # all H_matrix used for quantile alignment
+    #Hs = [adata.varm['H'] for adata in liger_object.adata_list]
+    Hs = [np.loadtxt('/Users/lulu/Desktop/result_H1.txt'), np.loadtxt('/Users/lulu/Desktop/result_H2.txt')]
     # Perform quantile alignment
     for k in range(num_samples):
         for j in range(num_clusters):
@@ -153,7 +166,7 @@ def quantile_norm(liger_object,
     # assign clusters and H_norm attributes to liger_object
     liger_object.clusters = pd.DataFrame(clusters, index=col_names)
     liger_object.H_norm = pd.DataFrame(H_norm, index=col_names)
-        
+
     return liger_object
 
 
@@ -208,7 +221,7 @@ def louvainCluster(liger_object,
     current_time = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
     output_path = 'edge_' + current_time + '.txt'
     
-    
+
 
 
 def imputeKNN(liger_object, 
