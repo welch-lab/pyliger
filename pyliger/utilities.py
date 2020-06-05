@@ -67,9 +67,9 @@ def MergeSparseDataAll(adata_list, library_names = None):
 def refine_clusts_knn(H, clusts, k, num_trees):
     """ helper function for refining clusers by KNN related to function quantile_norm """
     
-    """  
+    
     # implementation using sklearn NearestNeighbors 
-    neigh = NearestNeighbors(n_neighbors=k, radius=0, algorithm='kd_tree')
+    neigh = NearestNeighbors(n_neighbors=k, radius=1, algorithm='kd_tree')
     neigh.fit(H)
     
     H_knn = neigh.kneighbors(H, n_neighbors=k, return_distance=False)
@@ -124,6 +124,7 @@ def refine_clusts_knn(H, clusts, k, num_trees):
                 max_clust = key
                 max_count = value
         clusts[i] = max_clust
+    """
     return clusts
 
 
