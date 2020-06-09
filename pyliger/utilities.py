@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+import numpy as np
 from anndata import AnnData
 from annoy import AnnoyIndex
 from sklearn.neighbors import NearestNeighbors
@@ -64,32 +63,25 @@ def MergeSparseDataAll(adata_list, library_names = None):
     
     return merged_adata.T
 
-def refine_clusts_knn(H, clusts, k, num_trees):
+def refine_clusts_knn(H, clusts, k):
     """ helper function for refining clusers by KNN related to function quantile_norm """
     
-    
     # implementation using sklearn NearestNeighbors 
-    neigh = NearestNeighbors(n_neighbors=k, radius=1, algorithm='kd_tree')
+    neigh = NearestNeighbors(n_neighbors=k, radius=0, algorithm='kd_tree')
     neigh.fit(H)
+    H_knn = neigh.radius_neighbors(H, 100, return_distance=True, sort_results=True)[1]
+    #H_knn = neigh.kneighbors(H, n_neighbors=20, return_distance=False)
+    for i in range(len(H_knn)):
+        H_knn[i] = H_knn[i][0:k]
+    H_knn = np.vstack(H_knn)
     
-    H_knn = neigh.kneighbors(H, n_neighbors=k, return_distance=False)
+    clusts = cluster_vote(clusts, H_knn, k)
+
+    return clusts
+
+def refine_clusts_ann(H, clusts, k, num_trees):
+    """ helper function for refining clusers by ANN related to function quantile_norm """
     
-    # equal to cluster_vote function in Rcpp
-    for i in range(H_knn.shape[0]):
-        clust_counts = {}
-        for j in range(k):
-            if clusts[H_knn[i,j]] not in clust_counts:
-                clust_counts[clusts[H_knn[i,j]]] = 1
-            else:
-                clust_counts[clusts[H_knn[i,j]]] += 1
-        max_clust = -1
-        max_count = 0
-        for key, value in clust_counts.items():
-            if value > max_count:
-                max_clust = key
-                max_count = value
-        clusts[i] = max_clust
-    """
     # implementation using annoy library
     num_observations = H.shape[0]
     if num_trees is None:
@@ -108,15 +100,27 @@ def refine_clusts_knn(H, clusts, k, num_trees):
     
     t.build(num_trees)
     
-    # equal to cluster_vote function in Rcpp
+    # create indices matrices
     for i in range(num_observations):
-        H_knn = t.get_nns_by_vector(H[i], k)
+        if i == 0:
+            H_knn = np.array(t.get_nns_by_vector(H[i], k))
+        else:
+            H_knn = np.concatenate((H_knn, t.get_nns_by_vector(H[i], k)), axis=0)
+    
+    clusts = cluster_vote(clusts, H_knn, k)
+    
+    return clusts
+
+def cluster_vote(clusts, H_knn, k):
+    """"""
+    for i in range(H_knn.shape[0]):
         clust_counts = {}
         for j in range(k):
-            if clusts[H_knn[j]] not in clust_counts:
-                clust_counts[clusts[H_knn[j]]] = 1
+            if clusts[H_knn[i,j]] not in clust_counts:
+                clust_counts[clusts[H_knn[i,j]]] = 1
             else:
-                clust_counts[clusts[H_knn[j]]] += 1
+                clust_counts[clusts[H_knn[i,j]]] += 1
+        
         max_clust = -1
         max_count = 0
         for key, value in clust_counts.items():
@@ -124,9 +128,8 @@ def refine_clusts_knn(H, clusts, k, num_trees):
                 max_clust = key
                 max_count = value
         clusts[i] = max_clust
-    """
-    return clusts
 
+    return clusts
 
 def nonneg(x, eps=1e-16):
     """ Given a input matrix, set all negative values to be zero """
