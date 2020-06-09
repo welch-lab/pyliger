@@ -4,7 +4,7 @@ import pandas as pd
 from scipy import interpolate
 from numba import jit
 
-from .utilities import refine_clusts_knn
+from .utilities import refine_clusts_knn, refine_clusts_ann
 #######################################################################################
 #### Quantile Alignment/Normalization
     
@@ -18,6 +18,7 @@ def quantile_norm(liger_object,
                   num_trees = None, 
                   refine_knn = True,
                   knn_k = 20,
+                  use_ann = False,
                   rand_seed = 1):
     """Quantile align (normalize) factor loadings
     
@@ -65,6 +66,8 @@ def quantile_norm(liger_object,
         (the default is True).
     knn_k : int, optional
         Number of nearest neighbors for within-dataset knn graph (the default is 20). 
+    use_ann : bool, optional
+        whether to use approximate nearest neighbor (the default is False)
     rand_seed : int, optional
         Random seed to allow reproducible results (the default is 1).
 
@@ -79,6 +82,7 @@ def quantile_norm(liger_object,
     ligerex = quantile_norm(ligerex, resolution = 1.2) # higher resolution for more clusters (note that SNF is conserved)
     ligerex = quantile_norm(ligerex, knn_k = 15, resolution = 1.2) # change knn_k for more fine-grained local clustering
     """
+    
     np.random.seed(rand_seed)
     
     num_samples = len(liger_object.adata_list)
@@ -103,7 +107,7 @@ def quantile_norm(liger_object,
     #Hs = [adata.varm['H'][:,use_these_factors] for adata in liger_object.adata_list]
     Hs = [np.loadtxt('/Users/lulu/Desktop/result_H1.txt')[:,use_these_factors], np.loadtxt('/Users/lulu/Desktop/result_H2.txt')[:,use_these_factors]]
     num_clusters = Hs[ref_dataset_idx].shape[1]
-    
+
     # Max factor assignment
     clusters = []
     col_names = []
@@ -112,18 +116,21 @@ def quantile_norm(liger_object,
         if do_center:
             scale_H = (Hs[i]-np.mean(Hs[i], axis=0))/np.std(Hs[i], axis=0, ddof=1)
         else:
-            scale_H = Hs[i]/(np.sqrt(np.sum(np.square(Hs[i]), axis=0))/(Hs[i].shape[0]-1))
+            scale_H = Hs[i]/(np.sqrt(np.sum(np.square(Hs[i]), axis=0)/(Hs[i].shape[0]-1)))
 
         # get the index of maximum value for each cell, equal to max_factor in Rcpp
         clusts = np.argmax(scale_H, axis=1)
         
         # increase robustness of cluster assignments using knn graph
         if refine_knn:
-            clusts = refine_clusts_knn(Hs[i], clusts, k=knn_k, num_trees=num_trees)
+            if use_ann:
+                clusts = refine_clusts_ann(Hs[i], clusts, k=knn_k, num_trees=num_trees)
+            else:
+                clusts = refine_clusts_knn(Hs[i], clusts, k=knn_k)
             
         clusters.append(clusts)
         col_names.append(liger_object.adata_list[i].var['barcodes'])
-    
+     
     # all H_matrix used for quantile alignment
     #Hs = [adata.varm['H'] for adata in liger_object.adata_list]
     Hs = [np.loadtxt('/Users/lulu/Desktop/result_H1.txt'), np.loadtxt('/Users/lulu/Desktop/result_H2.txt')]
