@@ -205,7 +205,7 @@ def iNMF_HALS(liger_object,
     >>> ligerex = scaleNotCenter(ligerex)
     >>> ligerex = iNMF_HALS(ligerex, k = 20, lambda = 5, nrep = 3)
     """
-
+   
     adata_list = liger_object.adata_list
     num_samples = len(adata_list)
     num_cells = [adata_list[i].shape[1] for i in range(num_samples)]
@@ -296,7 +296,7 @@ def iNMF_HALS(liger_object,
         liger_object.adata_list[i].varm['H'] = H[i].transpose()
         liger_object.adata_list[i].obsm['W'] = W
         liger_object.adata_list[i].obsm['V'] = V[i]
-        
+      
     return liger_object
 
 # Perform factorization for new value of k
