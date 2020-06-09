@@ -39,7 +39,7 @@ class Liger(object):
         var_genes(list): 
             Subset of informative genes shared across datasets to be used in matrix
             factorization
-        H_norm(): 
+        H_norm(pd dataframe): 
             Normalized cell loading factors (cells across all datasets combined into single
             matrix)
         clusters(pd dataframe): 
