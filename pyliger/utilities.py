@@ -105,8 +105,8 @@ def refine_clusts_ann(H, clusts, k, num_trees):
         if i == 0:
             H_knn = np.array(t.get_nns_by_vector(H[i], k))
         else:
-            H_knn = np.concatenate((H_knn, t.get_nns_by_vector(H[i], k)), axis=0)
-    
+            H_knn = np.vstack((H_knn, t.get_nns_by_vector(H[i], k)))
+
     clusts = cluster_vote(clusts, H_knn, k)
     
     return clusts
@@ -127,6 +127,10 @@ def cluster_vote(clusts, H_knn, k):
             if value > max_count:
                 max_clust = key
                 max_count = value
+            elif value == max_count:
+                if key > max_clust:
+                    max_clust = key
+                    max_count = value
         clusts[i] = max_clust
 
     return clusts
