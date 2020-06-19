@@ -1,7 +1,7 @@
 import time
 import numpy as np
 
-from .utilities import nonneg
+from ._utilities import nonneg
 
 #######################################################################################
 #### Factorization
