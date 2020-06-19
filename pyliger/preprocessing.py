@@ -11,10 +11,10 @@ from scipy.optimize import minimize
 from scipy.sparse import csr_matrix, isspmatrix
 
 from .pyliger import Liger
-from .utilities import MergeSparseDataAll
+from ._utilities import merge_sparse_data_all
 
 
-def read10X(sample_dirs, 
+def read10x(sample_dirs, 
             sample_names, 
             merge = True, 
             num_cells = None, 
@@ -225,7 +225,7 @@ def read10X(sample_dirs,
         
     return datalist
 
-def createLiger(adata_list, 
+def create_liger(adata_list, 
                 make_sparse = True, 
                 take_gene_union = False,
                 remove_missing = True):
@@ -282,7 +282,7 @@ def createLiger(adata_list,
     
     # Take gene union (requires make_sparse=True)
     if take_gene_union and make_sparse:
-        merged_data = MergeSparseDataAll(adata_list)
+        merged_data = merge_sparse_data_all(adata_list)
         if remove_missing:
             missing_genes = np.array(np.sum(merged_data.X, axis=1)).flatten() == 0
             if np.sum(missing_genes) > 0:
@@ -301,10 +301,10 @@ def createLiger(adata_list,
     
     # Remove missing cells
     if remove_missing:
-        liger_object = removeMissingObs(liger_object, use_cols = True)
+        liger_object = _remove_missing_obs(liger_object, use_cols = True)
         # remove missing genes if not already merged
         if not take_gene_union:
-            liger_object = removeMissingObs(liger_object, use_cols = False)
+            liger_object = _remove_missing_obs(liger_object, use_cols = False)
     
     # Initialize cell_data for liger_object with nUMI, nGene, and dataset
     liger_object.cell_data = pd.DataFrame()
@@ -341,7 +341,7 @@ def normalize(liger_object):
     >>> ligerex = normalize(ligerex)
     """
     
-    liger_object = removeMissingObs(liger_object, slot_use='raw_data', use_cols=True)
+    liger_object = _remove_missing_obs(liger_object, slot_use='raw_data', use_cols=True)
     
     for i in range(len(liger_object.adata_list)):
         liger_object.adata_list[i].layers['norm_data'] = csr_matrix(liger_object.adata_list[i].X/np.sum(liger_object.adata_list[i].X, axis=0))
@@ -349,7 +349,7 @@ def normalize(liger_object):
     return liger_object
 
 
-def selectGenes(liger_object,
+def select_genes(liger_object,
                 var_thresh = 0.1,
                 alpha_thresh = 0.99,
                 num_genes = None,
@@ -500,7 +500,7 @@ def selectGenes(liger_object,
 
 
 
-def scaleNotCenter(liger_object, 
+def scale_not_center(liger_object, 
                    remove_missing = True):
     """Scale genes by root-mean-square across cells
     
@@ -541,11 +541,11 @@ def scaleNotCenter(liger_object,
     
     
     if remove_missing:
-        liger_object = removeMissingObs(liger_object, slot_use='scale_data', use_cols=False)
+        liger_object = _remove_missing_obs(liger_object, slot_use='scale_data', use_cols=False)
     return liger_object
 
 
-def removeMissingObs(liger_object, 
+def _remove_missing_obs(liger_object, 
                      slot_use = 'raw_data', 
                      use_cols = True):
     """Remove cells/genes with no expression across any genes/cells
