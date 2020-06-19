@@ -3,7 +3,7 @@ from anndata import AnnData
 from annoy import AnnoyIndex
 from sklearn.neighbors import NearestNeighbors
 
-def MergeSparseDataAll(adata_list, library_names = None):
+def merge_sparse_data_all(adata_list, library_names = None):
     """ Function to merage all sparse data into a single one
     
     Function takes in a list of DGEs, with gene rownames and cell colnames, 
@@ -63,25 +63,16 @@ def MergeSparseDataAll(adata_list, library_names = None):
     
     return merged_adata.T
 
-def refine_clusts_knn(H, clusts, k):
-    """ helper function for refining clusers by KNN related to function quantile_norm """
-    
-    # implementation using sklearn NearestNeighbors 
+def run_knn(H, k):
+    """ """
     neigh = NearestNeighbors(n_neighbors=k, radius=0, algorithm='kd_tree')
     neigh.fit(H)
-    H_knn = neigh.radius_neighbors(H, 100, return_distance=True, sort_results=True)[1]
-    #H_knn = neigh.kneighbors(H, n_neighbors=20, return_distance=False)
-    for i in range(len(H_knn)):
-        H_knn[i] = H_knn[i][0:k]
-    H_knn = np.vstack(H_knn)
+    H_knn = neigh.kneighbors(H, n_neighbors=k, return_distance=False)
     
-    clusts = cluster_vote(clusts, H_knn, k)
+    return H_knn
 
-    return clusts
-
-def refine_clusts_ann(H, clusts, k, num_trees):
-    """ helper function for refining clusers by ANN related to function quantile_norm """
-    
+def run_ann(H, k, num_trees=None):
+    """ """
     # implementation using annoy library
     num_observations = H.shape[0]
     if num_trees is None:
@@ -106,10 +97,21 @@ def refine_clusts_ann(H, clusts, k, num_trees):
             H_knn = np.array(t.get_nns_by_vector(H[i], k))
         else:
             H_knn = np.vstack((H_knn, t.get_nns_by_vector(H[i], k)))
+            
+    return H_knn
 
-    clusts = cluster_vote(clusts, H_knn, k)
+def refine_clusts(H, clusts, k, use_ann, num_trees=None):
+    """ helper function for refining clusers related to function quantile_norm """
     
+    if use_ann:
+        H_knn = run_ann(H, k, num_trees)
+    else:
+        H_knn = run_knn(H, k)
+    
+    clusts = cluster_vote(clusts, H_knn, k)
+
     return clusts
+
 
 def cluster_vote(clusts, H_knn, k):
     """"""
