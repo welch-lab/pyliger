@@ -25,7 +25,7 @@ def quantile_norm(liger_object,
     This process builds a shared factor neighborhood graph to jointly cluster cells, then quantile
     normalizes corresponding clusters.
 
-    The first step, building the shared factor neighborhood graph, is performed in SNF(), and
+    The first step, building the shared factor neighborhood graph, and
     produces a graph representation where edge weights between cells (across all datasets)
     correspond to their similarity in the shared factor neighborhood space. An important parameter
     here is knn_k, the number of neighbors used to build the shared factor space. 
@@ -126,8 +126,7 @@ def quantile_norm(liger_object,
             if use_ann:
                 clusts = refine_clusts_ann(Hs[i], clusts, k=knn_k, num_trees=num_trees)
             else:
-                clusts = refine_clusts_knn(Hs[i], clusts, k=knn_k)
-            
+                clusts = refine_clusts_knn(Hs[i], clusts, k=knn_k)     
         clusters.append(clusts)
         col_names.append(liger_object.adata_list[i].var['barcodes'])
      
@@ -143,9 +142,9 @@ def quantile_norm(liger_object,
             for i in range(num_clusters):
                 num_cells2 = np.sum(cells2)
                 num_cells1 = np.sum(cells1)
-               
+                
                 # skip clusters having too less cells
-                if num_cells1 or num_cells2 < min_cells:
+                if num_cells1 < min_cells or num_cells2 < min_cells:
                     continue
                 
                 if num_cells2 == 1:
@@ -153,19 +152,21 @@ def quantile_norm(liger_object,
                     continue
                 
                 # maxiumn number of cells used for quantile normalization
-                q2 = np.quantile(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)], np.linspace(0,1,num=quantiles))
-                q1 = np.quantile(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles))
-                
+                q2 = np.quantile(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)], np.linspace(0,1,num=quantiles+1))
+                q1 = np.quantile(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles+1))
+
                 if np.sum(q1) == 0 or np.sum(q2) == 0 or len(np.unique(q1)) < 2 or len(np.unique(q2)) < 2:
-                    new_vals = np.repeat(0, num_cells2)
-                else:
+                    new_vals = np.repeat(0, num_cells2) 
+                else: 
                     warp_func = interpolate.interp1d(q2, q1)
                     new_vals = warp_func(Hs[k][cells2, i])
                 Hs[k][cells2, i] = new_vals
+                
         if k == 0:
             H_norm = Hs[k]
         else:
-            H_norm = np.concatenate((H_norm, Hs[k]), axis=0)
+            H_norm = np.vstack((H_norm, Hs[k]))
+    
     # combine clusters into one
     clusters = np.array(clusters).flatten()
     col_names = np.array(col_names).flatten()
@@ -173,7 +174,7 @@ def quantile_norm(liger_object,
     # assign clusters and H_norm attributes to liger_object
     liger_object.clusters = pd.DataFrame(clusters, index=col_names)
     liger_object.H_norm = pd.DataFrame(H_norm, index=col_names)
-
+    
     return liger_object
 
 
