@@ -4,7 +4,7 @@ import pandas as pd
 from scipy import interpolate
 from numba import jit
 
-from .utilities import refine_clusts_knn, refine_clusts_ann
+from ._utilities import refine_clusts_knn, refine_clusts_ann
 #######################################################################################
 #### Quantile Alignment/Normalization
     
@@ -178,7 +178,7 @@ def quantile_norm(liger_object,
     return liger_object
 
 
-def louvainCluster(liger_object, 
+def louvain_cluster(liger_object, 
                    resolution = 1.0, 
                    k = 20, 
                    prune = 1 / 15, 
@@ -223,12 +223,13 @@ def louvainCluster(liger_object,
         
     Examples
     --------
-    >>> ligerex <- louvainCluster(ligerex, resulotion = 0.3) # liger object, factorization complete
+    >>> ligerex = louvainCluster(ligerex, resulotion = 0.3) # liger object, factorization complete
     """
     
     current_time = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
     output_path = 'edge_' + current_time + '.txt'
     
+   
 
 
 
