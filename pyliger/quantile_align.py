@@ -4,7 +4,7 @@ import pandas as pd
 from scipy import interpolate
 from numba import jit
 
-from ._utilities import refine_clusts_knn, refine_clusts_ann
+from ._utilities import refine_clusts
 #######################################################################################
 #### Quantile Alignment/Normalization
     
@@ -122,11 +122,8 @@ def quantile_norm(liger_object,
         clusts = np.argmax(scale_H, axis=1)
         
         # increase robustness of cluster assignments using knn graph
-        if refine_knn:
-            if use_ann:
-                clusts = refine_clusts_ann(Hs[i], clusts, k=knn_k, num_trees=num_trees)
-            else:
-                clusts = refine_clusts_knn(Hs[i], clusts, k=knn_k)     
+        clusts = refine_clusts(Hs[i], clusts, knn_k, use_ann, num_trees)
+        
         clusters.append(clusts)
         col_names.append(liger_object.adata_list[i].var['barcodes'])
      
