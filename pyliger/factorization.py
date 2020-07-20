@@ -205,11 +205,11 @@ def iNMF_HALS(liger_object,
     >>> ligerex = scaleNotCenter(ligerex)
     >>> ligerex = iNMF_HALS(ligerex, k = 20, lambda = 5, nrep = 3)
     """
-   
-    adata_list = liger_object.adata_list
-    num_samples = len(adata_list)
-    num_cells = [adata_list[i].shape[1] for i in range(num_samples)]
-    num_genes = adata_list[0].shape[0]
+
+    num_samples = len(liger_object.adata_list)
+    X = [liger_object.adata_list[i].layers['scale_data'] for i in range(num_samples)]
+    num_cells = [X[i].shape[1] for i in range(num_samples)]
+    num_genes = X[0].shape[0]
     
     # set seed
     np.random.seed(seed = rand_seed)
@@ -217,20 +217,24 @@ def iNMF_HALS(liger_object,
     # allow restarts
     num_rep = 0
     while num_rep < nrep:
-        # initialization
-        V = [adata_list[i].layers['scale_data'][:,np.random.choice(list(range(num_cells[i])), k)].toarray() for i in range(num_samples)]
+        # Initialization
+        V = [X[i][:,np.random.choice(list(range(num_cells[i])), k)].toarray() for i in range(num_samples)]
         W = np.abs(np.random.uniform(0, 2, (num_genes, k)))
-        H = [np.random.uniform(0, 2, (k, num_cells[i])) for i in range(num_samples)]
+        H = [np.random.uniform(0, 2, (k, num_cells[i])) for i in range(num_samples)]   
         
-        # normalize columns of dictionaries
+        # Normalize columns of dictionaries
         W = W/np.sqrt(np.sum(np.square(W), axis=0))
         V = [V[i]/np.sqrt(np.sum(np.square(V[i]), axis=0)) for i in range(num_samples)]
         
-        # initial training obj
+        V = [np.loadtxt('/Users/lulu/Desktop/V1.txt'), np.loadtxt('/Users/lulu/Desktop/V2.txt')]
+        W = np.loadtxt('/Users/lulu/Desktop/W.txt')
+        H = [np.loadtxt('/Users/lulu/Desktop/H1.txt'), np.loadtxt('/Users/lulu/Desktop/H2.txt')]
+        
+        # Initial training obj
         obj_train_approximation = 0
         obj_train_penalty = 0
         for i in range(num_samples):
-            obj_train_approximation += np.linalg.norm(np.float64(adata_list[i].layers['scale_data'].toarray())-np.float64((W+V[i]))@np.float64((H[i])))**2
+            obj_train_approximation += np.linalg.norm(X[i].toarray()-(W+V[i])@H[i])**2
             obj_train_penalty += np.linalg.norm(V[i]@H[i])**2
 
         obj_train = obj_train_approximation + value_lambda*obj_train_penalty
@@ -242,56 +246,56 @@ def iNMF_HALS(liger_object,
         total_time = 0 # track the total amount of time used for learning
         delta = np.inf
         
-        # perform block coordinate descent
+        # Perform block coordinate descent
         while delta > thresh and iteration <= max_iters:
-            
+                        
             iter_start_time = time.time()
 
+            # update H matrix
             VitVi = [V[i].transpose()@V[i] for i in range(num_samples)]
             W_Vi = [W+V[i] for i in range(num_samples)]
             W_Vi_sq = [W_Vi[i].transpose()@W_Vi[i] for i in range(num_samples)]
-            W_VitXi = [W_Vi[i].transpose()@adata_list[i].layers['scale_data'] for i in range(num_samples)]
-
             for i in range(num_samples):
                 for j in range(k):
-                    H[i][j,:] = nonneg((H[i][j,:]*W_Vi_sq[i][j,j] + W_VitXi[i][j,:] - (W_Vi_sq[i]@H[i])[j,:])/(W_Vi_sq[i][j,j] + value_lambda * VitVi[i][j,j]))
-                    
-            XHt = [adata_list[i].layers['scale_data']@H[i].transpose() for i in range(num_samples)]
-            HHt = [H[i]@H[i].transpose() for i in range(num_samples)]
+                    H[i][j,:] = nonneg(H[i][j,:] + (W_Vi[i][:,j].transpose()@X[i] - W_Vi[i][:,j].transpose()@W_Vi[i]@H[i] - value_lambda*VitVi[i][j,:]@H[i]) / (W_Vi_sq[i][j,j] + value_lambda*VitVi[i][j,j]))
+                    #H[i][j,:] = nonneg((H[i][j,:]*W_Vi_sq[i][j,j] + W_VitXi[i][j,:] - (W_Vi_sq[i]@H[i])[j,:])/(W_Vi_sq[i][j,j] + value_lambda * VitVi[i][j,j]))
 
+            # update W matrix     
+            XHt = [X[i]@H[i].transpose() for i in range(num_samples)]
+            HHt = [H[i]@H[i].transpose() for i in range(num_samples)]
             for j in range(k):
                 W_update_numerator = np.repeat(0, num_genes)
                 W_update_denominator = 0
                 for i in range(num_samples):
-                    W_update_numerator[:] = W_update_numerator[:] + XHt[i][:,j] - ((W + V[i])@HHt[i])[:,j]
+                    W_update_numerator = W_update_numerator + XHt[i][:,j] - ((W + V[i])@HHt[i])[:,j]
                     W_update_denominator += HHt[i][j,j]
                 W[:,j] = nonneg(W[:,j] + W_update_numerator / W_update_denominator)
-                
-            # update (Di).k
+
+            # update V matrix
             for j in range(k):
                 for i in range(num_samples):
-                    V[i][:,j] = nonneg(V[i][:,j] / (1 + value_lambda) + (XHt[i][:,j]-((W+V[i])@HHt[i])[:,j])/((1+value_lambda)*HHt[i][j,j]))
-                    
-            total_time += (time.time()-iter_start_time)
-            
+                    V[i][:,j] = nonneg(V[i][:,j] + (XHt[i][:,j] - (W + (1+value_lambda)*V[i])@HHt[i][:,j]) / ((1+value_lambda) * HHt[i][j,j]))
+                    #V[i][:,j] = nonneg(V[i][:,j] / (1 + value_lambda) + (XHt[i][:,j]-((W+V[i])@HHt[i])[:,j])/((1+value_lambda)*HHt[i][j,j]))
+              
             # training obj
-            obj_train_prev = obj_train
+            #obj_train_prev = obj_train
             obj_train_approximation = 0
             obj_train_penalty = 0
             for i in range(num_samples):
-                obj_train_approximation += np.linalg.norm(adata_list[i].layers['scale_data'] - (W + V[i])@H[i])**2
+                obj_train_approximation += np.linalg.norm(X[i] - (W + V[i])@H[i])**2
                 obj_train_penalty += np.linalg.norm(V[i]@H[i])**2
-            obj_train = obj_train_approximation + value_lambda*obj_train_penalty
-            delta = np.absolute(obj_train_prev - obj_train)/((obj_train_prev + obj_train)/2)
+            obj_train = obj_train_approximation + value_lambda * obj_train_penalty
+            #delta = np.absolute(obj_train_prev - obj_train)/((obj_train_prev + obj_train)/2)
             
-            # result
-            print('Iter: {}, Total time: {}, Obj Delta: {}'.format(iteration, total_time, delta))
+            # print result information
+            total_time += (time.time()-iter_start_time)
+            print('Iter: {}, Total time: {}, Training Obj: {}'.format(iteration, total_time, obj_train))
             
             iteration += 1
             
         num_rep += 1
     
-    # Save results to the liger_object
+    # Save results into the liger_object
     for i in range(num_samples):
         liger_object.adata_list[i].varm['H'] = H[i].transpose()
         liger_object.adata_list[i].obsm['W'] = W
