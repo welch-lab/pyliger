@@ -1,6 +1,8 @@
 import numpy as np
+import igraph as ig
 from anndata import AnnData
 from annoy import AnnoyIndex
+from scipy.sparse import csr_matrix
 from sklearn.neighbors import NearestNeighbors
 
 def merge_sparse_data_all(adata_list, library_names = None):
@@ -75,6 +77,8 @@ def run_ann(H, k, num_trees=None):
     """ """
     # implementation using annoy library
     num_observations = H.shape[0]
+    
+    # decide number of trees
     if num_trees is None:
         if num_observations < 100000:
             num_trees = 10
@@ -84,14 +88,14 @@ def run_ann(H, k, num_trees=None):
             num_trees = 50
         else:
             num_trees = 100     
-
+    
+    # build knn graph
     t = AnnoyIndex(k, 'angular')
     for i in range(num_observations):
         t.add_item(i, H[i])
-    
     t.build(num_trees)
     
-    # create indices matrices
+    # create knn indices matrices
     for i in range(num_observations):
         if i == 0:
             H_knn = np.array(t.get_nns_by_vector(H[i], k))
@@ -99,19 +103,6 @@ def run_ann(H, k, num_trees=None):
             H_knn = np.vstack((H_knn, t.get_nns_by_vector(H[i], k)))
             
     return H_knn
-
-def refine_clusts(H, clusts, k, use_ann, num_trees=None):
-    """ helper function for refining clusers related to function quantile_norm """
-    
-    if use_ann:
-        H_knn = run_ann(H, k, num_trees)
-    else:
-        H_knn = run_knn(H, k)
-    
-    clusts = cluster_vote(clusts, H_knn, k)
-
-    return clusts
-
 
 def cluster_vote(clusts, H_knn, k):
     """"""
@@ -136,6 +127,50 @@ def cluster_vote(clusts, H_knn, k):
         clusts[i] = max_clust
 
     return clusts
+
+def refine_clusts(H, clusts, k, use_ann, num_trees=None):
+    """helper function for refining clusers related to function quantile_norm """
+    if use_ann:
+        H_knn = run_ann(H, k, num_trees)
+    else:
+        H_knn = run_knn(H, k)
+    
+    clusts = cluster_vote(clusts, H_knn, k)
+
+    return clusts
+
+def compute_snn(knn, prune):
+    """helper function to compute the SNN graph"""
+    knn = knn.astype(np.int)
+    
+    k = knn.shape[1]
+    num_cells = knn.shape[0]
+    
+    snn = np.zeros([num_cells, num_cells])
+        
+    for j in range(k):
+        for i in range(num_cells):
+            snn[i,knn[i,j]] = 1
+            
+    snn = snn @ snn.transpose()
+    snn = snn/(k+(k-snn))
+    snn[snn<prune] = 0     
+       
+    return csr_matrix(snn)
+
+def build_igraph(snn):
+    """"""
+    sources, targets = snn.nonzero()
+    weights = snn[sources, targets]
+    print(weights)
+    if isinstance(weights, np.matrix):
+        weights = weights.A1
+    g = ig.Graph()
+    g.add_vertices(snn.shape[0]) 
+    g.add_edges(list(zip(sources, targets)))
+    g.es['weight'] = weights
+    
+    return g
 
 def nonneg(x, eps=1e-16):
     """ Given a input matrix, set all negative values to be zero """
