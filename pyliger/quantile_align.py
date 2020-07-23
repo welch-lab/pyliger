@@ -1,10 +1,12 @@
+import os
 import time
+import louvain
 import numpy as np
 import pandas as pd
 from scipy import interpolate
-from numba import jit
 
-from ._utilities import refine_clusts
+
+from ._utilities import refine_clusts, compute_snn, run_knn, build_igraph
 #######################################################################################
 #### Quantile Alignment/Normalization
     
@@ -104,8 +106,7 @@ def quantile_norm(liger_object,
         use_these_factors = dims_use
     
     # applied use_these_factors to Hs
-    #Hs = [adata.varm['H'][:,use_these_factors] for adata in liger_object.adata_list]
-    Hs = [np.loadtxt('/Users/lulu/Desktop/result_H1.txt')[:,use_these_factors], np.loadtxt('/Users/lulu/Desktop/result_H2.txt')[:,use_these_factors]]
+    Hs = [adata.varm['H'][:,use_these_factors] for adata in liger_object.adata_list]
     num_clusters = Hs[ref_dataset_idx].shape[1]
 
     # Max factor assignment
@@ -128,8 +129,8 @@ def quantile_norm(liger_object,
         col_names.append(liger_object.adata_list[i].var['barcodes'])
      
     # all H_matrix used for quantile alignment
-    #Hs = [adata.varm['H'] for adata in liger_object.adata_list]
-    Hs = [np.loadtxt('/Users/lulu/Desktop/result_H1.txt'), np.loadtxt('/Users/lulu/Desktop/result_H2.txt')]
+    Hs = [adata.varm['H'] for adata in liger_object.adata_list]
+    
     # Perform quantile alignment
     for k in range(num_samples):
         for j in range(num_clusters):
@@ -151,7 +152,7 @@ def quantile_norm(liger_object,
                 # maxiumn number of cells used for quantile normalization
                 q2 = np.quantile(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)], np.linspace(0,1,num=quantiles+1))
                 q1 = np.quantile(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles+1))
-
+                
                 if np.sum(q1) == 0 or np.sum(q2) == 0 or len(np.unique(q1)) < 2 or len(np.unique(q2)) < 2:
                     new_vals = np.repeat(0, num_cells2) 
                 else: 
@@ -180,8 +181,8 @@ def louvain_cluster(liger_object,
                    k = 20, 
                    prune = 1 / 15, 
                    eps = 0.1, 
-                   nRandomStarts = 10,
-                   nIterations = 100, 
+                   num_random_starts = 10,
+                   num_iterations = 100, 
                    random_seed = 1):
     """Louvain algorithm for community detection
     
@@ -206,9 +207,9 @@ def louvain_cluster(liger_object,
         prune everything) (the default is 1/15).
     eps : float, optional
         The error bound of the nearest neighbor search (the default is 0.1).
-    nRandomStarts : int, optional
+    num_random_starts : int, optional
         Number of random starts (the default is 10).
-    nIterations : int, optional
+    num_iterations : int, optional
         Maximal number of iterations per random start (the default is 100).
     random_seed : int, optional
         Seed of the random number generator (the default is 1).
@@ -220,14 +221,24 @@ def louvain_cluster(liger_object,
         
     Examples
     --------
-    >>> ligerex = louvainCluster(ligerex, resulotion = 0.3) # liger object, factorization complete
+    >>> ligerex = louvain_cluster(ligerex, resulotion = 0.3) # liger object, factorization complete
     """
-    
-    current_time = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
-    output_path = 'edge_' + current_time + '.txt'
-    
-   
+    # compute snn
+    knn = run_knn(liger_object.H_norm, k)
+    snn = compute_snn(knn, prune=prune)
 
+    # get igraph from snn
+    g = build_igraph(snn)
+    
+    # parameters for louvain
+    partition_type = louvain.RBConfigurationVertexPartition
+    kwargs = {'weights': g.es['weight'], 'resolution_parameter': resolution, 'seed': random_seed} 
+
+    part = louvain.find_partition(g, partition_type, **kwargs)
+    
+    liger_object.clusters = pd.DataFrame(np.array(part.membership).flatten(), index=liger_object.clusters.index)
+        
+    return liger_object
 
 
 def imputeKNN(liger_object, 
