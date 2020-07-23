@@ -226,10 +226,6 @@ def iNMF_HALS(liger_object,
         W = W/np.sqrt(np.sum(np.square(W), axis=0))
         V = [V[i]/np.sqrt(np.sum(np.square(V[i]), axis=0)) for i in range(num_samples)]
         
-        V = [np.loadtxt('/Users/lulu/Desktop/V1.txt'), np.loadtxt('/Users/lulu/Desktop/V2.txt')]
-        W = np.loadtxt('/Users/lulu/Desktop/W.txt')
-        H = [np.loadtxt('/Users/lulu/Desktop/H1.txt'), np.loadtxt('/Users/lulu/Desktop/H2.txt')]
-        
         # Initial training obj
         obj_train_approximation = 0
         obj_train_penalty = 0
