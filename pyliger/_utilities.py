@@ -151,8 +151,12 @@ def compute_snn(knn, prune):
     for j in range(k):
         for i in range(num_cells):
             snn[i,knn[i,j]] = 1
-            
+    
+    # use sparse matrix to speed up matrix multiplication
+    snn = csr_matrix(snn)
     snn = snn @ snn.transpose()
+    snn = snn.toarray()
+    
     snn = snn/(k+(k-snn))
     snn[snn<prune] = 0     
        
