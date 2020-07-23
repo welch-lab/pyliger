@@ -162,7 +162,7 @@ def build_igraph(snn):
     """"""
     sources, targets = snn.nonzero()
     weights = snn[sources, targets]
-    print(weights)
+
     if isinstance(weights, np.matrix):
         weights = weights.A1
     g = ig.Graph()
