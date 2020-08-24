@@ -141,11 +141,13 @@ def refine_clusts(H, clusts, k, use_ann, num_trees=None):
 
 def compute_snn(knn, prune):
     """helper function to compute the SNN graph"""
+    # int for indexing
     knn = knn.astype(np.int)
     
     k = knn.shape[1]
     num_cells = knn.shape[0]
     
+    """
     snn = np.zeros([num_cells, num_cells])
         
     for j in range(k):
@@ -156,11 +158,19 @@ def compute_snn(knn, prune):
     snn = csr_matrix(snn)
     snn = snn @ snn.transpose()
     snn = snn.toarray()
+    """
+    rows = np.repeat(list(range(num_cells)), k)
+    columns = knn.flatten()
+    data = np.repeat(1, num_cells*k)
+    snn = csr_matrix((data, (rows, columns)), shape=(num_cells, num_cells))
     
-    snn = snn/(k+(k-snn))
-    snn[snn<prune] = 0     
-       
-    return csr_matrix(snn)
+    snn = snn @ snn.transpose()
+
+    rows, columns = snn.nonzero()
+    data = snn.data/(k+(k-snn.data))
+    data[data<prune] = 0
+
+    return csr_matrix((data, (rows, columns)), shape=(num_cells, num_cells))
 
 def build_igraph(snn):
     """"""
