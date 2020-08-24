@@ -1,3 +1,9 @@
+import umap
+import umap.plot
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
 #######################################################################################
 #### Dimensionality Reduction
     
@@ -14,27 +20,150 @@ def runTSNE(liger_object,
     dims_use = range(1, len(liger_object.H_norm))
     pass
 
-# Perform UMAP dimensionality reduction
-def runUMAP(liger_object,
-            dims_use, 
+
+def run_umap(liger_object,
             use_raw = False, 
+            dims_use = None, 
             k = 2, 
             distance = "euclidean",
             n_neighbors = 10,
             min_dist = 0.1, 
             rand_seed = 42):
-    dims_use = range(1, len(liger_object.H_norm))
-    pass
+    """Perform UMAP dimensionality reduction
+    
+    Run UMAP on the normalized cell factors (or raw cell factors) to generate a 2D embedding for
+    visualization (or general dimensionality reduction). Has option to run on subset of factors.
+    
+    Note that running multiple times will overwrite tsne_coords values. It is generally
+    recommended to use this method for dimensionality reduction with extremely large datasets.
+
+    Parameters
+    ----------
+    liger_object : liger
+        Should run quantile_norm before calling with defaults.
+    use_raw : bool, optional
+        Whether to use un-aligned cell factor loadings (H matrices) (the default is False).
+    dims_use : list
+        Factors to use for computing tSNE embedding (the default is 1:ncol(H.norm)).
+    k : int, optional
+        Number of dimensions to reduce to (the default is 2).
+    distance : str, optional
+        Mtric used to measure distance in the input space. A wide variety of metrics are
+        already coded, and a user defined function can be passed as long as it has been JITd by numba.
+        (the default is "euclidean", alternatives: "cosine", "manhattan", "hamming").
+    n_neighbors : int, optional
+        Number of neighboring points used in local approximations of manifold
+        structure. Larger values will result in more global structure being preserved at the loss of
+        detailed local structure. In general this parameter should often be in the range 5 to 50, with
+        a choice of 10 to 15 being a sensible default (the default is 10).
+    min_dist : float, optional
+        Controls how tightly the embedding is allowed compress points together. Larger
+        values ensure embedded points are more evenly distributed, while smaller values allow the
+        algorithm to optimise more accurately with regard to local structure. Sensible values are in
+        the range 0.001 to 0.5, with 0.1 being a reasonable default (the default is 0.1).
+    rand_seed : int, optional
+        Random seed for reproducibility (the default is 42).
+
+    Returns
+    -------
+    liger_object : liger
+        object with tsne_coords attribute.
+
+    Examples
+    --------
+    ligerex <- quantile_norm(ligerex) # generate H_norm by quantile aligning factor loadings
+    ligerex <- run_umap(ligerex) # get tsne_coords for normalized data
+    ligerex <- run_umap(ligerex, use_raw = T) # get tsne.coords for raw factor loadings
+    """
+
+    raw_data = None
+    if use_raw:
+        for i in range(len(liger_object.adata_list)):
+            if raw_data is None:
+                raw_data = liger_object.adata_list[i].varm['H']
+            else:
+                raw_data = np.vstack((raw_data, liger_object.adata_list[i].varm['H']))
+        
+        # if H_norm not set yet
+        if not hasattr(liger_object, 'H_norm'):
+            dims_use = list(range(raw_data.shape[1]))
+        else:
+            dims_use = list(range(liger_object.H_norm.shape[1]))
+            
+        tsne_coords = umap.UMAP(n_components=k, metric=distance,
+                                n_neighbors=n_neighbors, min_dist=min_dist, 
+                                random_state=rand_seed).fit_transform(raw_data[:,dims_use])
+    else:
+        if dims_use is None:
+            dims_use = list(range(liger_object.H_norm.shape[1]))
+        
+        H_norm = liger_object.H_norm.to_numpy()  
+        
+        tsne_coords = umap.UMAP(n_components=k, metric=distance,
+                                n_neighbors=n_neighbors, min_dist=min_dist, 
+                                random_state=rand_seed).fit(H_norm[:,dims_use])
+    
+    #liger_object.tsne_coords = pd.DataFrame(tsne_coords, index=liger_object.H_norm.index,
+    #                                        columns = ['tsne1', 'tsne2'])
+    liger_object.tsne_coords = tsne_coords
+    return liger_object
 
 #######################################################################################
 #### Visualization
 
-# Plot t-SNE coordinates of cells across datasets
-def plotByDatasetAndCluster(liger_object, clusters = None, title = None, pt_size = 0.3,
-                            text_size = 3, do_shuffle = True, rand_seed = 1,
-                            axis_labels = None, do_legend = True, legend_size = 5,
-                            return_plots = False):
-    pass
+def plot_by_dataset_and_cluster(liger_object, 
+                                clusters = None, 
+                                title = None, 
+                                pt_size = 0.3,
+                                text_size = 3, 
+                                do_shuffle = True, 
+                                rand_seed = 1,
+                                axis_labels = None, 
+                                do_legend = True, 
+                                legend_size = 5,
+                                return_plots = False):
+    """Plot t-SNE coordinates of cells across datasets
+    
+    Generates two plots of all cells across datasets, one colored by dataset and one colored by
+    cluster. These are useful for visually examining the alignment and cluster distributions,
+    respectively. If clusters have not been set yet (quantileAlignSNF not called), will plot by
+    single color for second plot. It is also possible to pass in another clustering (as long as
+    names match those of cells).
+
+    Parameters
+    ----------
+    liger_object : TYPE
+        DESCRIPTION.
+    clusters : TYPE, optional
+        DESCRIPTION. The default is None.
+    title : TYPE, optional
+        DESCRIPTION. The default is None.
+    pt_size : TYPE, optional
+        DESCRIPTION. The default is 0.3.
+    text_size : TYPE, optional
+        DESCRIPTION. The default is 3.
+    do_shuffle : TYPE, optional
+        DESCRIPTION. The default is True.
+    rand_seed : TYPE, optional
+        DESCRIPTION. The default is 1.
+    axis_labels : TYPE, optional
+        DESCRIPTION. The default is None.
+    do_legend : TYPE, optional
+        DESCRIPTION. The default is True.
+    legend_size : TYPE, optional
+        DESCRIPTION. The default is 5.
+    return_plots : TYPE, optional
+        DESCRIPTION. The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    
+    return None
+    
 
 # Plot specific feature on t-SNE coordinates
 def plotFeature(liger_object, feature, by_dataset = True, discrete = None, title = None, 
