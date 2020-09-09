@@ -163,7 +163,6 @@ def iNMF_HALS(liger_object,
               nrep = 1,
               rand_seed = 1): 
     """Perform iNMF on scaled datasets using HALS method
-    
 
     Parameters
     ----------
@@ -207,7 +206,7 @@ def iNMF_HALS(liger_object,
     """
 
     num_samples = len(liger_object.adata_list)
-    X = [liger_object.adata_list[i].layers['scale_data'] for i in range(num_samples)]
+    X = [liger_object.adata_list[i].layers['scale_data'].transpose() for i in range(num_samples)]
     num_cells = [X[i].shape[1] for i in range(num_samples)]
     num_genes = X[0].shape[0]
     
@@ -293,9 +292,9 @@ def iNMF_HALS(liger_object,
     
     # Save results into the liger_object
     for i in range(num_samples):
-        liger_object.adata_list[i].varm['H'] = H[i].transpose()
-        liger_object.adata_list[i].obsm['W'] = W
-        liger_object.adata_list[i].obsm['V'] = V[i]
+        liger_object.adata_list[i].obsm['H'] = H[i].transpose()
+        liger_object.adata_list[i].varm['W'] = W
+        liger_object.adata_list[i].varm['V'] = V[i]
       
     return liger_object
 
