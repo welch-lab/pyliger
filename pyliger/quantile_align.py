@@ -1,9 +1,11 @@
 import os
 import time
-import louvain
 import numpy as np
 import pandas as pd
+import louvain, leidenalg
 from scipy import interpolate
+from scipy.stats import ranksums
+from scipy.sparse import csr_matrix, vstack
 
 
 from ._utilities import refine_clusts, compute_snn, run_knn, build_igraph
@@ -69,7 +71,7 @@ def quantile_norm(liger_object,
     knn_k : int, optional
         Number of nearest neighbors for within-dataset knn graph (the default is 20). 
     use_ann : bool, optional
-        whether to use approximate nearest neighbor (the default is False)
+        Whether to use approximate nearest neighbor (the default is False)
     rand_seed : int, optional
         Random seed to allow reproducible results (the default is 1).
 
@@ -101,17 +103,16 @@ def quantile_norm(liger_object,
 
     # set indices of factors
     if dims_use is None:
-        use_these_factors = list(range(liger_object.adata_list[0].varm['H'].shape[1]))
+        use_these_factors = list(range(liger_object.adata_list[0].obsm['H'].shape[1]))
     else:
         use_these_factors = dims_use
     
     # applied use_these_factors to Hs
-    Hs = [adata.varm['H'][:,use_these_factors] for adata in liger_object.adata_list]
+    Hs = [adata.obsm['H'][:, use_these_factors] for adata in liger_object.adata_list]
     num_clusters = Hs[ref_dataset_idx].shape[1]
 
-    # Max factor assignment
+    ### Max factor assignment
     clusters = []
-    col_names = []
     for i in range(num_samples):
         # scale the H matrix by columns, equal to scale_columns_fast in Rcpp
         if do_center:
@@ -126,12 +127,14 @@ def quantile_norm(liger_object,
         clusts = refine_clusts(Hs[i], clusts, knn_k, use_ann, num_trees)
         
         clusters.append(clusts)
-        col_names.append(liger_object.adata_list[i].var['barcodes'])
-     
-    # all H_matrix used for quantile alignment
-    Hs = [adata.varm['H'] for adata in liger_object.adata_list]
+        
+        # assign clusters to corresponding adata
+        liger_object.adata_list[i].obs['cluster'] = clusts
     
-    # Perform quantile alignment
+    # all H_matrix used for quantile alignment
+    Hs = [adata.obsm['H'] for adata in liger_object.adata_list]
+    
+    ### Perform quantile alignment
     for k in range(num_samples):
         for j in range(num_clusters):
             cells2 = clusters[k] == j
@@ -159,31 +162,20 @@ def quantile_norm(liger_object,
                     warp_func = interpolate.interp1d(q2, q1)
                     new_vals = warp_func(Hs[k][cells2, i])
                 Hs[k][cells2, i] = new_vals
-                
-        if k == 0:
-            H_norm = Hs[k]
-        else:
-            H_norm = np.vstack((H_norm, Hs[k]))
-    
-    # combine clusters into one
-    clusters = np.array(clusters).flatten()
-    col_names = np.array(col_names).flatten()
-    
-    # assign clusters and H_norm attributes to liger_object
-    liger_object.clusters = pd.DataFrame(clusters, index=col_names)
-    liger_object.H_norm = pd.DataFrame(H_norm, index=col_names)
+        
+        # assign H_norm to corresponding adata
+        liger_object.adata_list[k].obsm['H_norm'] = Hs[k]         
     
     return liger_object
 
+#from memory_profiler import profile
 
+#@profile
 def louvain_cluster(liger_object, 
-                   resolution = 1.0, 
-                   k = 20, 
-                   prune = 1 / 15, 
-                   eps = 0.1, 
-                   num_random_starts = 10,
-                   num_iterations = 100, 
-                   random_seed = 1):
+                    resolution = 1.0, 
+                    k = 20, 
+                    prune = 1 / 15, 
+                    random_seed = 1):
     """Louvain algorithm for community detection
     
     After quantile normalization, users can additionally run the Louvain algorithm 
@@ -205,12 +197,6 @@ def louvain_cluster(liger_object,
         values less than or equal to this will be set to 0 and removed from the SNN
         graph. Essentially sets the strigency of pruning (0 --- no pruning, 1 ---
         prune everything) (the default is 1/15).
-    eps : float, optional
-        The error bound of the nearest neighbor search (the default is 0.1).
-    num_random_starts : int, optional
-        Number of random starts (the default is 10).
-    num_iterations : int, optional
-        Maximal number of iterations per random start (the default is 100).
     random_seed : int, optional
         Seed of the random number generator (the default is 1).
 
@@ -223,23 +209,56 @@ def louvain_cluster(liger_object,
     --------
     >>> ligerex = louvain_cluster(ligerex, resulotion = 0.3) # liger object, factorization complete
     """
-    # compute snn
-    knn = run_knn(liger_object.H_norm, k)
+    ### 1. Compute snn
+    H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
+    knn = run_knn(H_norm, k)
     snn = compute_snn(knn, prune=prune)
 
-    # get igraph from snn
+    ### 2. Get igraph from snn
     g = build_igraph(snn)
     
-    # parameters for louvain
+    ### 3. Run louvain
+    kwargs = {'weights': g.es['weight'], 'resolution_parameter': resolution, 'seed': random_seed} # parameters setting
     partition_type = louvain.RBConfigurationVertexPartition
-    kwargs = {'weights': g.es['weight'], 'resolution_parameter': resolution, 'seed': random_seed} 
-
     part = louvain.find_partition(g, partition_type, **kwargs)
     
-    liger_object.clusters = pd.DataFrame(np.array(part.membership).flatten(), index=liger_object.clusters.index)
-        
-    return liger_object
+    ### 4. Assign cluster results
+    clusters = np.array(part.membership).flatten()
+    idx = 0
+    for i in range(len(liger_object.adata_list)):        
+        liger_object.adata_list[i].obs['cluster'] = clusters[idx:(idx+liger_object.adata_list[i].shape[0])]
+        idx = liger_object.adata_list[i].shape[0]
+    
+    return liger_object, part.quality()
 
+def leiden_cluster(liger_object, 
+                   resolution = 1.0, 
+                   k = 20, 
+                   prune = 1 / 15, 
+                   random_seed = 1,
+                   n_iterations = 2):
+    ### 1. Compute snn
+    #H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
+    H_norm = np.loadtxt('/Users/lulu/Desktop/H_norm.txt')
+    knn = run_knn(H_norm, k)
+    snn = compute_snn(knn, prune=prune)
+    
+    ### 2. Get igraph from snn
+    g = build_igraph(snn)
+    
+    ### 3. Run leiden
+    kwargs = {'weights': g.es['weight'], 'resolution_parameter': resolution, 'seed': random_seed} # parameters setting
+    partition_type = leidenalg.RBConfigurationVertexPartition
+    part = leidenalg.find_partition(g, partition_type, n_iterations=n_iterations, **kwargs)
+
+    ### 4. Assign cluster results
+    clusters = np.array(part.membership).flatten()
+    idx = 0
+    for i in range(len(liger_object.adata_list)):        
+        liger_object.adata_list[i].obs['cluster'] = clusters[idx:(idx+liger_object.adata_list[i].shape[0])]
+        idx = liger_object.adata_list[i].shape[0]
+    
+    return liger_object, part.quality()
 
 def imputeKNN(liger_object, 
               reference, 
@@ -267,7 +286,7 @@ def imputeKNN(liger_object,
     norm : bool, optional
         Whether normalize the imputed data with default parameters (the default is True).
     scale : bool, optional
-        Whether scale but not center the imputed data with default parameters (default True).
+        Whether scale but not center the imputed data with default parameters (the default is True).
 
     Returns
     -------
@@ -281,10 +300,83 @@ def imputeKNN(liger_object,
     """
     pass
 
-# Perform Wilcoxon rank-sum test
-def runWilcoxon(liger_object, compare_method, data_use = "all"):
-    pass
 
+def run_wilcoxon(liger_object, 
+                 compare_method, 
+                 data_use = "all"):
+    """Perform Wilcoxon rank-sum test
+    
+    Perform Wilcoxon rank-sum tests on specified dataset using given method.
+
+    Parameters
+    ----------
+    liger_object : liger object
+        object.
+    compare_method : str, optional, 'clusters' or 'datasets'
+        This indicates the metric of the test.
+    data_use : str or list
+        This selects which dataset(s) to use (the default is "all").
+
+    Returns
+    -------
+    results : pd data frame
+   TODO     A -columns data.frame with test results.
+    
+    
+    # check parameter inputs
+    if not compare_method == 'datasets' and not compare_method == 'clusters':
+        raise ValueError('Parameter *compare.method* should be either *clusters* or *datasets*.')
+    if compare_method == 'datasets':
+        if len(liger_object.adata_list) < 2:
+            raise ValueError('Should have at least TWO inputs to compare between datasets.')
+        if isinstance(data_use, list) and len(data_use) < 2:
+            raise ValueError('Should have at least TWO inputs to compare between datasets.')
+    
+    ### Create feature x sample matrix
+    if data_use == 'all':
+        num_samples = len(liger_object.adata_list)
+        sample_names = [adata.uns['sample_name'] for adata in liger_object.adata_list]
+        print('Performing Wilcoxon test on ALL datasets: {}'.format(', '.join(sample_names)))
+    else:
+        num_samples = len(data_use)
+        sample_names = data_use
+        sample_names_all = [adata.uns['sample_name'] for adata in liger_object.adata_list]
+        sample_idx = [sample_names_all.index(name) for name in sample_names]
+        print('Performing Wilcoxon test on GIVEN datasets: {}'.format(', '.join(sample_names)))
+    
+    # get all shared genes of every datasets
+    genes = []
+    for i in range(num_samples):      
+        genes = np.intersect1d(genes, liger_object.adata_list[sample_idx[i]].obs['gene_name'])
+     
+    # TODO: change to barcodes as rows and shared genes as columns
+    # get feature matrix, shared genes as rows and all barcodes as columns
+    feature_matrix = []
+    for i in range(num_samples):
+        idx = liger_object.adata_list[sample_idx[i]].obs['gene_name'].isin(genes).to_numpy()
+        feature_matrix.append(liger_object.adata_list[i].layers['norm_data'][idx,])
+    feature_matrix = vstack(feature_matrix)
+    
+    # get labels of clusters and datasets
+    cell_source = 
+        
+    else: # for one dataset only
+        print("Performing Wilcoxon test on GIVEN dataset: ")
+        feature_matrix = 
+        clusters = 
+            
+    ### Perform wilcoxon test
+    if compare_method == 'clusters':
+        num_rows = feature_matrix.shape[0]
+        if num_rows > 100000:
+            print('Calculating Large-scale Input...')
+            results = 
+            
+    if compare_method == 'datasets':
+        results = 
+        
+    return results
+"""
 # Linking genes to putative regulatory elements
 def linkGenesAndPeaks(gene_counts, peak_counts, path_to_coords, genes_list = None, dist = "spearman", 
                       alpha = 0.05):
