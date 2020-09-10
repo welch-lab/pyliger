@@ -22,13 +22,13 @@ def runTSNE(liger_object,
 
 
 def run_umap(liger_object,
-            use_raw = False, 
-            dims_use = None, 
-            k = 2, 
-            distance = "euclidean",
-            n_neighbors = 10,
-            min_dist = 0.1, 
-            rand_seed = 42):
+             use_raw = False, 
+             dims_use = None, 
+             k = 2, 
+             distance = "euclidean",
+             n_neighbors = 10,
+             min_dist = 0.1, 
+             rand_seed = 42):
     """Perform UMAP dimensionality reduction
     
     Run UMAP on the normalized cell factors (or raw cell factors) to generate a 2D embedding for
@@ -75,14 +75,14 @@ def run_umap(liger_object,
     ligerex <- run_umap(ligerex) # get tsne_coords for normalized data
     ligerex <- run_umap(ligerex, use_raw = T) # get tsne.coords for raw factor loadings
     """
-
+    num_samples = len(liger_object.adata_list)
     raw_data = None
     if use_raw:
-        for i in range(len(liger_object.adata_list)):
+        for i in range(num_samples):
             if raw_data is None:
-                raw_data = liger_object.adata_list[i].varm['H']
+                raw_data = liger_object.adata_list[i].obsm['H']
             else:
-                raw_data = np.vstack((raw_data, liger_object.adata_list[i].varm['H']))
+                raw_data = np.vstack((raw_data, liger_object.adata_list[i].obsm['H']))
         
         # if H_norm not set yet
         if not hasattr(liger_object, 'H_norm'):
