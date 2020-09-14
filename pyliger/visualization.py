@@ -44,7 +44,7 @@ def run_umap(liger_object,
     use_raw : bool, optional
         Whether to use un-aligned cell factor loadings (H matrices) (the default is False).
     dims_use : list
-        Factors to use for computing tSNE embedding (the default is 1:ncol(H.norm)).
+        Factors to use for computing tSNE embedding (the default is using all cells).
     k : int, optional
         Number of dimensions to reduce to (the default is 2).
     distance : str, optional
@@ -75,33 +75,37 @@ def run_umap(liger_object,
     ligerex <- run_umap(ligerex) # get tsne_coords for normalized data
     ligerex <- run_umap(ligerex, use_raw = T) # get tsne.coords for raw factor loadings
     """
-    num_samples = len(liger_object.adata_list)
-    raw_data = None
+    np.random.seed(rand_seed)
+    
+    ### Run umap
     if use_raw:
-        for i in range(num_samples):
-            if raw_data is None:
-                raw_data = liger_object.adata_list[i].obsm['H']
-            else:
-                raw_data = np.vstack((raw_data, liger_object.adata_list[i].obsm['H']))
+        raw_data = np.vstack([adata.obsm['H'] for adata in liger_object.adata_list])
         
         # if H_norm not set yet
-        if not hasattr(liger_object, 'H_norm'):
-            dims_use = list(range(raw_data.shape[1]))
+        if 'H_norm' not in liger_object.adata_list[0].obs_keys():
+            dims_use = list(range(raw_data.shape[0]))
         else:
-            dims_use = list(range(liger_object.H_norm.shape[1]))
+            H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
+            dims_use = list(range(H_norm.shape[0]))
             
         tsne_coords = umap.UMAP(n_components=k, metric=distance,
                                 n_neighbors=n_neighbors, min_dist=min_dist, 
-                                random_state=rand_seed).fit_transform(raw_data[:,dims_use])
+                                random_state=rand_seed).fit_transform(raw_data[dims_use, :])
     else:
         if dims_use is None:
-            dims_use = list(range(liger_object.H_norm.shape[1]))
-        
-        H_norm = liger_object.H_norm.to_numpy()  
+            H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
+            dims_use = list(range(H_norm.shape[0]))
         
         tsne_coords = umap.UMAP(n_components=k, metric=distance,
                                 n_neighbors=n_neighbors, min_dist=min_dist, 
-                                random_state=rand_seed).fit(H_norm[:,dims_use])
+                                random_state=rand_seed).fit(H_norm[dims_use, :])
+    
+    ### Assign umap results
+    #tsne_coords = np.array(cluster).flatten()
+    #idx = 0
+    #for i in range(len(liger_object.adata_list)):        
+    #    liger_object.adata_list[i].obs['cluster'] = cluster[idx:(idx+liger_object.adata_list[i].shape[0])]
+    #    idx = liger_object.adata_list[i].shape[0]
     
     #liger_object.tsne_coords = pd.DataFrame(tsne_coords, index=liger_object.H_norm.index,
     #                                        columns = ['tsne1', 'tsne2'])
