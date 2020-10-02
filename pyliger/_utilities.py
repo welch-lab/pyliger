@@ -1,9 +1,13 @@
 import numpy as np
+import pandas as pd
 import igraph as ig
+import statsmodels.stats.multitest as smt
 from anndata import AnnData
 from annoy import AnnoyIndex
-from scipy.sparse import csr_matrix
+from scipy.stats import ranksums, mannwhitneyu
+from scipy.sparse import csr_matrix, isspmatrix
 from sklearn.neighbors import NearestNeighbors
+
 
 def merge_sparse_data_all(adata_list, library_names = None):
     """ Function to merge all sparse data into a single one
@@ -32,6 +36,7 @@ def merge_sparse_data_all(adata_list, library_names = None):
     
     return merged_adata
 
+################################## For KNN ################################
 def run_knn(H, k):
     """ """
     neigh = NearestNeighbors(n_neighbors=k, radius=0, algorithm='kd_tree')
@@ -106,6 +111,7 @@ def refine_clusts(H, clusts, k, use_ann, num_trees=None):
 
     return clusts
 
+################################## For Louvain and Leiden ################################
 def compute_snn(knn, prune):
     """helper function to compute the SNN graph"""
     # int for indexing
@@ -114,18 +120,6 @@ def compute_snn(knn, prune):
     k = knn.shape[1]
     num_cells = knn.shape[0]
     
-    """
-    snn = np.zeros([num_cells, num_cells])
-        
-    for j in range(k):
-        for i in range(num_cells):
-            snn[i,knn[i,j]] = 1
-    
-    # use sparse matrix to speed up matrix multiplication
-    snn = csr_matrix(snn)
-    snn = snn @ snn.transpose()
-    snn = snn.toarray()
-    """
     rows = np.repeat(list(range(num_cells)), k)
     columns = knn.flatten()
     data = np.repeat(1, num_cells*k)
@@ -157,3 +151,63 @@ def nonneg(x, eps=1e-16):
     """ Given a input matrix, set all negative values to be zero """
     x[x<eps] = eps
     return x
+
+################################## For Wilcoxon test ################################
+def wilcoxon(X, y, gene_name, groups_use=None, verbose=True):
+    """helper function for wilcoxon tests on single-cell datasets (cell by gene matrix)"""
+    ### Check and possibly correct input values
+    #if not isspmatrix(X):
+    #    X = csr_matrix(X)
+    
+    if X.shape[0] != len(y):
+        raise ValueError('Number of columns of X does not match length of y')
+    
+    if groups_use is not None:
+        idx_use = np.isin(groups_use, y)
+        X = X[idx_use, :]
+        y = y[idx_use]
+        
+    idx_use = np.isnan(y)
+    if len(idx_use) < len(y):
+        X = X[~idx_use, :]
+        y = y[~idx_use]
+        if verbose:
+            print('Removing NA values from labels')
+    
+    ### Compute primary statistics
+    cluster_size = pd.Series(y).value_counts().to_numpy() # count value frequency
+    #n1n2 = cluster_size * (X.shape[0] - cluster_size)
+    num_genes = X.shape[1]
+    clusters = np.unique(y).astype(np.int)
+    statistic = np.array([])
+    pval = np.array([])
+    padj = np.array([])
+    sum_table = np.zeros((len(clusters), num_genes))
+    
+    for i in range(len(clusters)):
+        idx = y == clusters[i]
+        sum_table[i, :] = np.sum(X[idx, :], axis=0)
+        temp_pval = np.array([])
+        for i in range(num_genes):
+            ustat = mannwhitneyu(X[idx, i], X[~idx, i], use_continuity=False, alternative='two-sided')
+            statistic = np.concatenate((statistic, ustat.statistic), axis=None)
+            temp_pval = np.concatenate((temp_pval, ustat.pvalue), axis=None)
+        pval = np.concatenate((pval, temp_pval), axis=None)
+        padj = np.concatenate((padj, smt.multipletests(temp_pval, method='fdr_bh')[1]), axis=None)
+    
+    ### Auxiliary Statistics (AvgExpr, LFC, etc)
+    lfc = np.array([])
+    cs = np.sum(sum_table, axis=0)
+    avg_expr = sum_table.transpose() / cluster_size
+    for i in range(len(clusters)):
+        temp = avg_expr[:, i] - ((cs - sum_table[i, :]) / (len(y) - cluster_size[i]))
+        lfc = np.concatenate((lfc, temp), axis=None)
+    
+    cluster_label = np.repeat(clusters, num_genes)
+    gene_label = np.tile(gene_name, len(clusters))
+    
+    return np.array([gene_label, cluster_label, avg_expr.transpose().flatten(), lfc, statistic, pval, padj])
+
+def tidy_results(data, gene_name):
+    
+    return None

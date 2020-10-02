@@ -1,14 +1,13 @@
 import os
-import time
 import numpy as np
 import pandas as pd
 import louvain, leidenalg
+from functools import reduce
 from scipy import interpolate
-from scipy.stats import ranksums
 from scipy.sparse import csr_matrix, vstack
 
 
-from ._utilities import refine_clusts, compute_snn, run_knn, build_igraph
+from ._utilities import refine_clusts, compute_snn, run_knn, build_igraph, wilcoxon
 #######################################################################################
 #### Quantile Alignment/Normalization
     
@@ -181,7 +180,8 @@ def louvain_cluster(liger_object,
     
     After quantile normalization, users can additionally run the Louvain algorithm 
     for community detection, which is widely used in single-cell analysis and excels at merging 
-    small clusters into broad cell classes.
+    small clusters 
+    nto broad cell classes.
 
     Parameters
     ----------
@@ -287,7 +287,8 @@ def leiden_cluster(liger_object,
     >>> ligerex = leiden_cluster(ligerex, resulotion = 0.25) # liger object, factorization complete
     """
     ### 1. Compute snn
-    H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
+    #H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
+    H_norm = np.loadtxt('/Users/lulu/Desktop/H_norm.txt')
     knn = run_knn(H_norm, k)
     snn = compute_snn(knn, prune=prune)
     
@@ -375,11 +376,9 @@ def run_wilcoxon(liger_object,
     Returns
     -------
     results : pd data frame
-   TODO     A -columns data.frame with test results.
-    
-    
+    """
     # check parameter inputs
-    if not compare_method == 'datasets' and not compare_method == 'clusters':
+    if compare_method not in ['datasets', 'clusters']:
         raise ValueError('Parameter *compare.method* should be either *clusters* or *datasets*.')
     if compare_method == 'datasets':
         if len(liger_object.adata_list) < 2:
@@ -387,10 +386,11 @@ def run_wilcoxon(liger_object,
         if isinstance(data_use, list) and len(data_use) < 2:
             raise ValueError('Should have at least TWO inputs to compare between datasets.')
     
-    ### Create feature x sample matrix
+    ### Create feature x sample matrix   
     if data_use == 'all':
         num_samples = len(liger_object.adata_list)
         sample_names = [adata.uns['sample_name'] for adata in liger_object.adata_list]
+        sample_idx = list(range(num_samples))
         print('Performing Wilcoxon test on ALL datasets: {}'.format(', '.join(sample_names)))
     else:
         num_samples = len(data_use)
@@ -398,40 +398,47 @@ def run_wilcoxon(liger_object,
         sample_names_all = [adata.uns['sample_name'] for adata in liger_object.adata_list]
         sample_idx = [sample_names_all.index(name) for name in sample_names]
         print('Performing Wilcoxon test on GIVEN datasets: {}'.format(', '.join(sample_names)))
-    
+ 
     # get all shared genes of every datasets
-    genes = []
-    for i in range(num_samples):      
-        genes = np.intersect1d(genes, liger_object.adata_list[sample_idx[i]].obs['gene_name'])
-     
-    # TODO: change to barcodes as rows and shared genes as columns
-    # get feature matrix, shared genes as rows and all barcodes as columns
+    genes_all = [liger_object.adata_list[idx].var['gene_name'].to_numpy() for idx in sample_idx]
+    genes_shared = reduce(np.intersect1d, genes_all)
+
+    # get feature matrix, shared genes as columns and all barcodes as rows, as well as labels of clusters and datasets
     feature_matrix = []
-    for i in range(num_samples):
-        idx = liger_object.adata_list[sample_idx[i]].obs['gene_name'].isin(genes).to_numpy()
-        feature_matrix.append(liger_object.adata_list[i].layers['norm_data'][idx,])
+    clusters = []
+    cell_source = []
+    for idx in sample_idx:
+        _, gene_idx, _ = np.intersect1d(liger_object.adata_list[idx].var['gene_name'], genes_shared, return_indices=True)
+        gene_idx = np.sort(gene_idx) # make sure data are extracted in the original order
+        feature_matrix.append(liger_object.adata_list[idx].layers['norm_data'][:, gene_idx])
+        clusters.append(liger_object.adata_list[idx].obs['cluster'])
+        cell_source.append(np.repeat(liger_object.adata_list[idx].uns['sample_name'], gene_idx.shape[0]))
+        gene_name = liger_object.adata_list[idx].var['gene_name'][gene_idx]
+
     feature_matrix = vstack(feature_matrix)
-    
-    # get labels of clusters and datasets
-    cell_source = 
-        
-    else: # for one dataset only
-        print("Performing Wilcoxon test on GIVEN dataset: ")
-        feature_matrix = 
-        clusters = 
-            
+    clusters = np.concatenate(clusters)
+    cell_source = np.vstack(cell_source)
+
     ### Perform wilcoxon test
+    # compare between clusters across datasets
     if compare_method == 'clusters':
-        num_rows = feature_matrix.shape[0]
+        num_rows = feature_matrix.shape[1]
         if num_rows > 100000:
             print('Calculating Large-scale Input...')
-            results = 
-            
-    if compare_method == 'datasets':
-        results = 
-        
+       
+        data = wilcoxon(np.log(feature_matrix.toarray() + 1e-10), clusters, gene_name)
+
+    # compare between datasets within each cluster        
+    #if compare_method == 'datasets':
+    #    levels = np.unique(clusters)
+    #    for level in levels:
+    #       sub_barcodes = 
+    #       sub_label = 
+    #        sub_matrix = 
+    #    results = 
+    results = pd.DataFrame(data=np.array(data).transpose(), columns=['feature','group', 'avgExpr', 'logFC', 'statistic', 'pval', 'padj'])
     return results
-"""
+
 # Linking genes to putative regulatory elements
 def linkGenesAndPeaks(gene_counts, peak_counts, path_to_coords, genes_list = None, dist = "spearman", 
                       alpha = 0.05):
