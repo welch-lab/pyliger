@@ -206,7 +206,11 @@ def iNMF_HALS(liger_object,
     """
 
     num_samples = len(liger_object.adata_list)
-    X = [liger_object.adata_list[i].layers['scale_data'].transpose() for i in range(num_samples)]
+    X = []
+    for adata in liger_object.adata_list:
+        idx = adata.uns['var_gene_idx']
+        X.append(adata.layers['scale_data'][:, idx].transpose())
+
     num_cells = [X[i].shape[1] for i in range(num_samples)]
     num_genes = X[0].shape[0]
     
@@ -292,9 +296,15 @@ def iNMF_HALS(liger_object,
     
     # Save results into the liger_object
     for i in range(num_samples):
+        idx = liger_object.adata_list[i].uns['var_gene_idx']
+        shape = liger_object.adata_list[i].shape
+        save_W = np.zeros((shape[1], k))
+        save_W[idx, :] = W
+        save_V = np.zeros((shape[1], k))
+        save_V[idx, :] = V[i]
         liger_object.adata_list[i].obsm['H'] = H[i].transpose()
-        liger_object.adata_list[i].varm['W'] = W
-        liger_object.adata_list[i].varm['V'] = V[i]
+        liger_object.adata_list[i].varm['W'] = save_W
+        liger_object.adata_list[i].varm['V'] = save_V
       
     return liger_object
 
