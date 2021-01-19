@@ -67,8 +67,8 @@ def read_10x(sample_dirs,
     --------
     >>> sample_dir1 = "path/to/outer/dir1" # 10X output directory V2 -- contains outs/raw_gene_bc_matrices/<reference>/...
     >>> sample_dir2 = "path/to/outer/dir2" # 10X output directory V3 -- for two data types, Gene Expression and CUSTOM
-    >>> dges1 = read10X(list(sample_dir1, sample_dir2), c("sample1", "sample2"), min.umis = 50)
-    >>> ligerex = createLiger(expr = dges1[["Gene Expression"]], custom = dges1[["CUSTOM"]])
+    >>> dges1 = read_10x([sample_dir1, sample_dir2], ["sample1", "sample2"], min.umis = 50)
+    >>> ligerex = create_liger(expr = dges1[["Gene Expression"]], custom = dges1[["CUSTOM"]])
     """
 
     datalist = []
@@ -280,16 +280,16 @@ def create_liger(adata_list,
         for i in range(num_samples):
             if isspmatrix(adata_list[i].X):
                 # force raw data to be csr matrix
-                adata_list[i].X = csr_matrix(adata_list[i].X)
+                adata_list[i].X = csr_matrix(adata_list[i].X, dtype=np.float64)
                 # check if dimnames exist
-                if not adata_list[i].obs_keys() or not adata_list[i].var_keys():
+                if not adata_list[i].obs.index.name or not adata_list[i].var.index.name:
                     raise ValueError('Raw data must have both row (cell) and column (gene) names.')
                 # check whether cell name is unique or not
-                if adata_list[i].obs['barcodes'].shape[0] - np.unique(adata_list[i].obs['barcodes']).shape[0] > 0 and adata_list[i].X.shape[1] > 1:
+                if not adata_list[i].obs.index.is_unique and adata_list[i].X.shape[0] > 1:
                     raise ValueError(
                         'At least one cell name is repeated across datasets; please make sure all cell names are unique.')
             else:
-                adata_list[i].X = csr_matrix(adata_list[i].X)
+                adata_list[i].X = csr_matrix(adata_list[i].X, dtype=np.float64)
 
     # Take gene union (requires make_sparse=True)
     if take_gene_union and make_sparse:
@@ -300,12 +300,12 @@ def create_liger(adata_list,
                 print('Removing {} genes not expressed in any cells across merged datasets.'.format(np.sum(missing_genes)))
                 # show gene name when the total of missing genes is less than 25
                 if np.sum(missing_genes) < 25:
-                    print(merged_data.var['gene_name'][missing_genes])
+                    print(merged_data.var.index[missing_genes])
                 # save data after removing missing genes
                 merged_data = merged_data[:, ~missing_genes].copy()
         # fill out raw_data matrices with union of genes across all datasets
         for i in range(num_samples):
-            adata_list[i] = merged_data[merged_data.obs['barcodes'] == adata_list[i].obs['barcodes'], :].copy()
+            adata_list[i] = merged_data[merged_data.obs.index == adata_list[i].index, :].copy()
 
     # Create liger object based on raw data list
     liger_object = Liger(adata_list)
@@ -318,6 +318,7 @@ def create_liger(adata_list,
             liger_object = _remove_missing_obs(liger_object, use_rows=False)
 
     # Initialize cell_data for liger_object with nUMI, nGene, and dataset
+    """
     liger_object.cell_data = pd.DataFrame()
     for adata in adata_list:
         temp = pd.DataFrame(index=adata.obs['barcodes'])
@@ -325,7 +326,13 @@ def create_liger(adata_list,
         temp['nGene'] = np.count_nonzero(adata.X.toarray(), axis=1)
         temp['dataset'] = np.repeat(adata.uns['sample_name'], adata.obs['barcodes'].shape[0])
         liger_object.cell_data.append(temp)
-
+        print(adata, temp)
+        """
+    for idx, adata in enumerate(adata_list):
+        liger_object.adata_list[idx].obs['nUMI'] = np.asarray(np.sum(adata.X, axis=1), dtype=np.int).flatten()
+        liger_object.adata_list[idx].obs['nGene'] = np.count_nonzero(adata.X.toarray(), axis=1)
+        liger_object.adata_list[idx].obs['dataset'] = np.repeat(adata.uns['sample_name'], adata.obs.index.shape[0])
+    
     return liger_object
 
 
@@ -351,11 +358,15 @@ def normalize(liger_object):
     >>> ligerex = create_liger([adata1, adata2])
     >>> ligerex = normalize(ligerex)
     """
-    num_samples = len(liger_object.adata_list)
+    num_samples = liger_object.num_samples
     liger_object = _remove_missing_obs(liger_object, slot_use='raw_data', use_rows=True)
+    
 
     for i in range(num_samples):
-        liger_object.adata_list[i].layers['norm_data'] = csr_matrix(liger_object.adata_list[i].X / np.sum(liger_object.adata_list[i].X, axis=1))
+        raw_data = liger_object.adata_list[i].X
+        norm_data = raw_data / np.sum(raw_data, axis=1)
+        liger_object.adata_list[i].layers['norm_data'] = csr_matrix(norm_data, dtype=np.float64)
+        
 
     return liger_object
 
@@ -372,7 +383,7 @@ def select_genes(liger_object,
                  do_plot=False,
                  cex_use=0.3):
     """Select a subset of informative genes
-    
+
     This function identifies highly variable genes from each dataset and combines these gene sets
     (either by union or intersection) for use in downstream analysis. Assuming that gene
     expression approximately follows a Poisson distribution, this function identifies genes with
@@ -399,8 +410,8 @@ def select_genes(liger_object,
     tol : float, optional
         Tolerance to use for optimization if num.genes values passed in (the default is 0.0001).
     datasets_use : list, optional
-        List of datasets to include for discovery of highly variable genes 
-        (the default is list(range(len(liger_object.adata_list)))).
+        List of datasets to include for discovery of highly variable genes
+        (the default is using all datatsets).
     combine : str, optional, 'union' or 'intersect'
         How to combine variable genes across experiments (the default is 'union').
     keep_unique : bool, optional
@@ -429,10 +440,10 @@ def select_genes(liger_object,
     >>> ligerex = select_genes(ligerex) # use default selectGenes settings
     >>> ligerex = select_genes(ligerex, var_thresh=0.8) # select a smaller subset of genes
     """
-    num_samples = len(liger_object.adata_list)
-    
+    num_samples = liger_object.num_samples
+
     if datasets_use is None:
-        datasets_use = list(range(len(liger_object.adata_list)))
+        datasets_use = list(range(num_samples))
 
     # Expand if only single var_thresh passed
     if isinstance(var_thresh, int) or isinstance(var_thresh, float):
@@ -446,39 +457,41 @@ def select_genes(liger_object,
     genes_use = np.array([])
     for i in datasets_use:
         if capitalize:
-            liger_object.adata_list[i].var['gene_name'] = liger_object.adata_list[i].var['gene_name'].str.upper()
+            liger_object.adata_list[i].var.index = liger_object.adata_list[i].var.index.str.upper()
 
-        trx_per_cell = np.array(np.sum(liger_object.adata_list[i].X, axis=1)).flatten()
-        # Each gene's mean expression level (across all cells)
-        gene_expr_mean = np.array(np.mean(liger_object.adata_list[i].layers['norm_data'], axis=0)).flatten()
-        # Each gene's expression variance (across all cells)
-        gene_expr_var = np.array(np.var(liger_object.adata_list[i].layers['norm_data'].toarray(), axis=0)).flatten()
-
+        trx_per_cell = np.ravel(np.sum(liger_object.adata_list[i].X, axis=1))
+        # each gene's mean expression level (across all cells)
+        gene_expr_mean = np.ravel(np.mean(liger_object.adata_list[i].layers['norm_data'], axis=0))
+        # each gene's expression variance (across all cells)
+        gene_expr_var = np.ravel(
+            np.var(liger_object.adata_list[i].layers['norm_data'].toarray(), axis=0, dtype=np.float64, ddof=1))
         nolan_constant = np.mean(1 / trx_per_cell)
         alphathresh_corrected = alpha_thresh / liger_object.adata_list[i].shape[1]
-
         gene_mean_upper = gene_expr_mean + norm.ppf(1 - alphathresh_corrected / 2) * np.sqrt(
             gene_expr_mean * nolan_constant / liger_object.adata_list[i].shape[0])
-
         base_gene_lower = np.log10(gene_expr_mean * nolan_constant)
 
         def num_varGenes(x, num_genes_des):
             # This function returns the difference between the desired number of genes and
             # the number actually obtained when thresholded on x
-            y = np.sum((gene_expr_var / nolan_constant) > gene_mean_upper & np.log10(gene_expr_var) > (base_gene_lower + x))
+            y = np.sum(
+                (gene_expr_var / nolan_constant) > gene_mean_upper & np.log10(gene_expr_var, dtype=np.float64) > (
+                            base_gene_lower + x))
             return np.abs(num_genes_des - y)
 
         if num_genes is not None:
             # Optimize to find value of x which gives the desired number of genes for this dataset
             # if very small number of genes requested, var.thresh may need to exceed 1
-
             optimized = minimize(fun=num_varGenes, x0=[0], agrs=num_genes[i], tol=tol, bounds=[(0, 1.5)])
             var_thresh[i] = optimized.x
             if var_thresh[i].shape[0] > 1:
-                warnings.warn('Returned number of genes for dataset {} differs from requested by {}. Lower tol or alpha_thresh for better results.'.format(i, optimized.x.shape[0]))
+                warnings.warn(
+                    'Returned number of genes for dataset {} differs from requested by {}. Lower tol or alpha_thresh for better results.'.format(
+                        i, optimized.x.shape[0]))
 
-        select_gene = ((gene_expr_var / nolan_constant) > gene_mean_upper) & (np.log10(gene_expr_var) > (base_gene_lower + var_thresh[i]))
-        genes_new = liger_object.adata_list[i].var['gene_name'].to_numpy()[select_gene]
+        select_gene = ((gene_expr_var / nolan_constant) > gene_mean_upper) & (
+                    np.log10(gene_expr_var) > (base_gene_lower + var_thresh[i]))
+        genes_new = liger_object.adata_list[i].var.index.to_numpy()[select_gene]
 
         # TODO: graph needs to be improved
         if do_plot:
@@ -503,13 +516,15 @@ def select_genes(liger_object,
 
     if not keep_unique:
         for i in range(num_samples):
-            genes_use = np.intersect1d(genes_use, liger_object.adata_list[i].var['gene_name'])
+            genes_use = np.intersect1d(genes_use, liger_object.adata_list[i].var.index)
 
     if genes_use.shape[0] == 0:
         warnings.warn('No genes were selected; lower var_thresh values or choose "union" for combine parameter')
 
-    liger_object.var_genes = genes_use   
-
+    liger_object.var_genes = genes_use
+    for i in range(num_samples):
+        idx = liger_object.adata_list[i].var.index.isin(genes_use)
+        liger_object.adata_list[i].uns['var_gene_idx'] = idx.nonzero()[0]
     return liger_object
 
 
@@ -544,17 +559,25 @@ def scale_not_center(liger_object,
     >>> ligerex = select_genes(ligerex) # select genes
     >>> ligerex = scale_not_center(ligerex)
     """
-    num_sampels = len(liger_object.adata_list)
+    num_samples = liger_object.num_samples
     
-    for i in range(num_sampels):
-        idx = liger_object.adata_list[i].var['gene_name'].isin(liger_object.var_genes).to_numpy()
-        liger_object.adata_list[i] = liger_object.adata_list[i][:, idx].copy()
+    for i in range(num_samples):
+        sample_shape = liger_object.adata_list[i].shape
+        idx = liger_object.adata_list[i].var.index.isin(liger_object.var_genes)
+        selected_data = liger_object.adata_list[i].layers['norm_data'][:, idx]
+        scale_data = csr_matrix(selected_data / np.sqrt(np.sum(np.square(selected_data.toarray()), axis=0) / (selected_data.shape[0] - 1)), dtype=np.float64)
         
-        temp_norm = liger_object.adata_list[i].layers['norm_data']
-        liger_object.adata_list[i].layers['scale_data'] = csr_matrix(temp_norm / np.sqrt(np.sum(np.square(temp_norm.toarray()), axis=0) / (temp_norm.shape[0] - 1)))
+        numerical_idx = np.nonzero(idx)[0]
+        row_idx, col_idx = scale_data.nonzero()
+        col_idx = np.take(numerical_idx, col_idx)
+        liger_object.adata_list[i].layers['scale_data'] = csr_matrix((scale_data.data, (row_idx, col_idx)), shape=sample_shape, dtype=np.float64)
+        
+        #liger_object.adata_list[i] = liger_object.adata_list[i][:, idx].copy()
+        #temp_norm = liger_object.adata_list[i].layers['norm_data']
+        #liger_object.adata_list[i].layers['scale_data'] = csr_matrix(temp_norm / np.sqrt(np.sum(np.square(temp_norm.toarray()), axis=0) / (temp_norm.shape[0] - 1)))
 
-    if remove_missing:
-        liger_object = _remove_missing_obs(liger_object, slot_use='scale_data', use_rows=False)
+    #if remove_missing:
+    #    liger_object = _remove_missing_obs(liger_object, slot_use='scale_data', use_rows=False)
     
     return liger_object
 
@@ -605,12 +628,12 @@ def _remove_missing_obs(liger_object,
             if use_rows:
                 # show gene name when the total of missing is less than 25
                 if np.sum(missing) < 25:
-                    print(liger_object.adata_list[i].var['gene_name'][missing])
+                    print(liger_object.adata_list[i].obs.index[missing])
                 liger_object.adata_list[i] = liger_object.adata_list[i][~missing, :].copy()
             else:
                 # show cell name when the total of missing is less than 25
                 if np.sum(missing) < 25:
-                    print(liger_object.adata_list[i].obs['barcode'][missing])
+                    print(liger_object.adata_list[i].var.index[missing])
                 liger_object.adata_list[i] = liger_object.adata_list[i][:, ~missing].copy()
 
     return liger_object
