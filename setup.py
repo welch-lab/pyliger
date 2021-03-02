@@ -12,6 +12,19 @@ setup(name='pyliger',
       install_requires=[
               'pandas',
               'numpy',
-              'anndata'
+              'scipy',
+              'anndata',
+              'python-igraph',
+              'annoy',
+              'louvain',
+              'leidenalg',
+              'umap-learn',
+              'matplotlib',
+              'datashader',
+              'bokeh',
+              'holoviews',
+              'colorcet',
+              'scikit-learn',
+              'h5sparse'
               ],
       zip_safe=False)

@@ -1,37 +1,32 @@
-# -*- coding: utf-8 -*-
-import re
-import time
-import warnings
-import scipy.io
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
-from scipy.optimize import minimize
-from scipy.sparse import csr_matrix, isspmatrix
+
+from scipy.sparse import vstack
 from anndata import AnnData
-import matplotlib.pyplot as plt
 
 
-## The LIGER Class
+"""
+The pyliger main class
+"""
 class Liger(object):
     """Main LIGER class
     
     The liger object is created from two or more single cell datasets. To construct a
     liger object, the user needs to provide at least two expression (or another
-    single-cell modality) matrices. The class provides functions for data
-    preprocessing, integrative analysis, and visualization.
+    single-cell modality) matrices. The class serves as a container for results generated
+    from  data preprocessing, integrative analysis, and visualization.
         
     Attributes:
         adata_list(list):
-            List of AnnData objects, one per experiment/dataset (genes by cells)
+            List of AnnData objects, one per experiment/dataset (cells by genes)
             In each AnnData objects, main matrix stores raw data and two addtional
-            layers store normalized data and scaled data with keys norm_data and
-            scale_data respectively. 
-            H(list): 
+            layers store normalized and scaled data with keys 'norm_data' and
+            'scale_data' respectively.
+            H(matrix): 
             Cell loading factors (one matrix per dataset, dimensions cells by k)
-            W(): 
+            W(matrix): 
             Shared gene loading factors (k by genes)
-            V(list): 
+            V(matrix): 
             Dataset-specific gene loading factors (one matrix per dataset, dimensions k by genes)
         cell_data(pd dataframe): 
             Dataframe of cell attributes across all datasets (nrows equal to total number
@@ -59,91 +54,190 @@ class Liger(object):
             Version of package used to create object
     """
     
-    __slots__ = ('adata_list', 'cell_data', 'var_genes', 'H_norm', 'clusters', 
-                 'tsne_coords', 'alignment_clusters', 'agg_data', 'parameters', 
+    __slots__ = ('adata_list', 'pending_list', 'W', 'cell_data', 'var_genes', 'tsne_coords',
+                 'alignment_clusters', 'agg_data', 'parameters',
                  'snf', 'version')
     
-    def __init__(self, adata_list):
+    def __init__(self, adata_list=[], pending_list=[]):
         self.adata_list = adata_list
-        
+        self.pending_list = pending_list
+
+    #@property
+    #def adata_list(self):
+    #    return self._adata_list
+    #@adata_list.setter
+    #def adata_list(self):
+
+    @property
+    def num_samples(self):
+        return len(self.adata_list)
+
+    @property
+    def num_var_genes(self):
+        return len(self.var_genes)
+
+    @property
+    def sample_names(self):
+        return [adata.uns['sample_name'] for adata in self.adata_list]
+
+    @property
+    def H(self):
+        """num_cells x k"""
+        return [adata.obsm['H'] for adata in self.adata_list]
+
+    @property
+    def V(self):
+        """num_genes x k"""
+        #return [adata.varm['V'][adata.uns['var_gene_idx'], :] for adata in self.adata_list]
+        return [adata.varm['V'] for adata in self.adata_list]
+
+    #@property
+    #def W(self):
+    #    """W is the shared component. Only return one is enough."""
+    #    return self.adata_list[0].varm['W'][self.adata_list[0].uns['var_gene_idx'], :]
+
     def show(self):
-        print("An object of class liger with {} datasets and {} total cells.".format(len(self.raw_data),len(self.cell_data)))
+        print("An object of class liger with {} datasets and {} total cells.".format(self.num_samples),len(self.cell_data))
 
+    def add_adata(self, new_arrive):
+        if isinstance(new_arrive, list):
+            for adata in new_arrive:
+                if isinstance(new_arrive, AnnData):
+                    self.pending_list.append(adata)
+                else:
+                    print('Invalid input. Input must be list of AnnData object')
+        elif isinstance(new_arrive, AnnData):
+            self.pending_list.append(new_arrive)
+        else:
+            print('Invalid input. Input must be AnnData object')
 
+    def save_raw(self):
+        for i in range(self.num_samples):
+            self.adata_list[i].raw = self.adata_list[i]
 
+    def find_dataset_idx(self, dataset_name):
+        for i in range(self.num_samples):
+            if dataset_name == self.adata_list[i].uns['sample_name']:
+                return i
+            else:
+                continue
+        return 'Dataset does not exist'
 
+    def get_data(self, set_name, dataset_use='all', combine=False, use_var=False):
+        """"""
+        if dataset_use == 'all':
+            if set_name == 'raw':
+                data = [adata.X for adata in self.adata_list]
+            else:
+                data = [adata.layers[set_name] for adata in self.adata_list]
 
-#######################################################################################
-#### Metrics
+            if combine:
+                data = vstack(data)
 
-# Calculate a dataset-specificity score for each factor
-def calcDatasetSpecificity(liger_object, dataset1 = None, dataset2 = None, do_plot = True):
-    pass
+        else:
+            if set_name == 'raw':
+                data = self.adata_list[dataset_use].X
+            else:
+                data = self.adata_list[dataset_use].layers[set_name]
 
-# Calculate agreement metric
-def calcAgreement(liger_object, dr_method = "NMF", ndims = 40, k = 15, use_aligned = True,
-                  rand_seed = 42, by_dataset = False):
-    pass
+        return data
 
-# Calculate alignment metric
-def calcAlignment(liger_object, k = None, rand_seed = 1, cells_use = None, cells_comp = None,
-                  clusters_use = None, by_cell = False, by_dataset = False):
-    pass
+    def get_obs(self, obs_name, return_values=False):
+        obs_values = pd.concat([adata.obs[obs_name] for adata in self.adata_list])
+        
+        if return_values:
+            return obs_values.values
+        else:
+            return obs_values
 
-# Calculate alignment for each cluster
-def calcAlignmentPerCluster(liger_object, rand_seed = 1, k = None, by_dataset = False):
-    pass
+    def get_obsm(self, obsm_name, dataset_use='all', combine=True):
+        """
 
-# Calculate adjusted Rand index
-def calcARI(liger_object, clusters_compare):
-    pass
+        Args:
+            obsm_name:
+            dataset_use:
 
-# Calculate purity
-def calcPurity(liger_object, classes_compare):
-    pass
+        Returns:
 
-# Calculate proportion mitochondrial contribution
-def getProportionMito(liger_object, use_norm = False):
-    pass
+        """
+        if dataset_use == 'all':
+            if combine:
+                obsm_values = np.concatenate([adata.obsm[obsm_name] for adata in self.adata_list])
+            else:
+                obsm_values = [adata.obsm[obsm_name] for adata in self.adata_list]
+        else:
+            adata = self.adata_list[dataset_use]
+            obsm_values = adata.obsm[obsm_name]
 
+        return obsm_values
 
+    def return_H(self, dataset_use='all'):
+        H_list = []
+        for adata in self.adata_list:
+            if dataset_use == 'all':
+                H_list.append(adata.obsm['H'])
+            elif dataset_use == adata.uns['sample_name']:
+                H_list.append(adata.obsm['H'])
+            else:
+                continue
+        return H_list
 
-#######################################################################################
-#### Marker/Cell Analysis
+    def return_raw(self, dataset_use='all'):
+        for adata in self.adata_list:
+            if dataset_use == 'all':
+                yield adata.X
+            elif dataset_use == adata.uns['sample_name']:
+                yield adata.X
 
-# Find shared and dataset-specific markers
-def getFactorMarkers(liger_object, dataset1 = None, dataset2 = None, factor_share_thresh = 10,
-                     dataset_specificity = None, log_fc_thresh = 1, umi_thresh = 30,
-                     frac_thresh = 0, pval_thresh = 0.05, num_genes = 30, print_genes = False):
-    pass
+    def get_varm(self, var_name, dataset_use='all'):
+        """
 
-#######################################################################################
-#### Conversion/Transformation
+        Args:
+            var_name:
+            dataset_use:
 
-# Create a Seurat object containing the data from a liger object
-# TO-DO names function
-#def ligerToSeurat(liger_object, nms = names(object@H), renormalize = True, use_liger_genes = True,
-#                  by_dataset = False):
-#    pass
+        Returns:
 
-# Create liger object from one or more Seurat objects
-def seuratToLiger(liger_object, combined_seurat = False, names = "use-projects", meta_var = None,
-                  assays_use = None, raw_assay = "RNA", remove_missing = True, renormalize = True,
-                  use_seurat_genes = True, num_hvg_info = None, use_idents = True, use_tsne = True,
-                  cca_to_H = False):
-    pass
+        """
+        if var_name == 'W':
+            adata = self.adata_list[0]
+            var_values = adata.varm[var_name][adata.uns['var_gene_idx'], :]
+        else:
+            if dataset_use == 'all':
+                var_values = np.concatenate([adata.varm[var_name][adata.uns['var_gene_idx'], :] for adata in self.adata_list])
+            else:
+                adata = self.adata_list[dataset_use]
+                var_values = adata.varm[var_name][adata.uns['var_gene_idx'], :]
 
-# Construct a liger object with a specified subset
-def subsetLiger(liger_object, clusters_use = None, cells_use = None, remove_missing = True):
-    pass
+        return var_values
 
-# Construct a liger object organized by another feature
-def reorganizeLiger(liger_object, by_feature, keep_meta = True, new_label = "orig.dataset"):
-    pass
+    def get_gene_values(self, gene, data_use='raw', use_cols=False, methylation_indices=None, log2scale=False,
+                        scale_factor=10000):
+        """"""
+        if methylation_indices is None:
+            methylation_indices = []
+        #gene_list = np.asarray([adata.var.index for adata in self.adata_list])
+        if data_use == 'raw':
+            data = self.get_data('raw')
+        elif data_use == 'norm':
+            data = self.get_data('norm_data')
+        else:
+            raise ValueError('invaild data_use input')
 
-# Convert older liger object into most current version (based on class definition)
-def convertOldLiger(liger_object, override_raw = False):
-    pass
+        gene_vals_total = []
+        for idx, mtx in enumerate(data):
+            gene_names = self.adata_list[idx].var.index
+            if gene in gene_names:
+                gene_idx = gene_names.get_loc(gene)
+                gene_vals = np.ravel(mtx[:, gene_idx].toarray())
+            else:
+                gene_vals = np.zeros(mtx.shape[0], dtype=np.int)
+            if log2scale and idx not in methylation_indices:
+                gene_vals = np.log2(gene_vals * scale_factor + 1)
 
+            gene_vals_total.append(gene_vals)
 
+        return np.concatenate(gene_vals_total)
 
+    def check_status(self):
+        return None
