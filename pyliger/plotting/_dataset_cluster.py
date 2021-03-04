@@ -84,12 +84,12 @@ def plot_by_dataset_and_cluster(liger_object,
         p1 = p1 + xlab(axis_labels[0]) + ylab(axis_labels[1])
         p2 = p2 + xlab(axis_labels[0]) + ylab(axis_labels[1])
 
-    if do_legend:
-        p1 = p1 + theme(legend_position='none')
-        p2 = p2 + theme(legend_position='none')
-
     p1 = p1 + theme_classic(12)
     p2 = p2 + theme_classic(12)
+
+    if not do_legend:
+        p1 = p1 + theme(legend_position='none')
+        p2 = p2 + theme(legend_position='none')
 
     if return_plots:
         return ([p1, p2])
