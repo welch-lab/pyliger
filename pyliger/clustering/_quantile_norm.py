@@ -151,8 +151,10 @@ def quantile_norm(liger_object,
                                 np.linspace(0, 1, num=quantiles + 1), alphap=1, betap=1)
                 q1 = mquantiles(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles+1),
                                 alphap=1, betap=1)
-                #q2 = np.quantile(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)], np.linspace(0,1,num=quantiles+1))
-                #q1 = np.quantile(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles+1))
+
+                # handle ties (zeros) in order to get consistent results with LIGER
+                q1 = _mean_ties(q2, q1)
+
                 if np.sum(q1) == 0 or np.sum(q2) == 0 or len(np.unique(q1)) < 2 or len(np.unique(q2)) < 2:
                     new_vals = np.repeat(0, num_cells2) 
                 else:
@@ -165,3 +167,11 @@ def quantile_norm(liger_object,
     
     return None
 
+
+def _mean_ties(x, y):
+    """helper function to calculate the mean value of y where ties zero occure in x"""
+    idx_zeros = x == 0
+    if np.sum(idx_zeros) > 0:
+        y[idx_zeros] = np.mean(y[idx_zeros])
+
+    return y
