@@ -4,7 +4,6 @@ from ._marker import get_factor_markers
 from ._wilcoxon import run_wilcoxon, _wilcoxon
 
 
-
 #######################################################################################
 #### Conversion/Transformation TODO
 
@@ -35,41 +34,3 @@ def reorganizeLiger(liger_object, by_feature, keep_meta=True, new_label="orig.da
 # Convert older liger object into most current version (based on class definition)
 def convertOldLiger(liger_object, override_raw=False):
     pass
-
-
-"""
-def _remove_missing_obs(liger_object,
-                        slot_use='raw_data',
-                        use_rows=True):
-
-    num_samples = len(liger_object.adata_list)
-
-    removed = str(np.where(slot_use in ['raw_data', 'norm_data'] and use_rows == True, 'cells', 'genes'))
-    expressed = str(np.where(removed == 'cells', ' any genes', ''))
-
-    for i in range(num_samples):
-        data_type = liger_object.adata_list[i].uns['sample_name']
-        if slot_use == 'raw_data':
-            filter_data = liger_object.adata_list[i].X
-        elif slot_use == 'scale_data':
-            filter_data = liger_object.adata_list[i].layers['scale_data']
-
-        if use_rows:
-            missing = np.array(np.sum(filter_data, axis=1)).flatten() == 0
-        else:
-            missing = np.array(np.sum(filter_data, axis=0)).flatten() == 0
-        if np.sum(missing) > 0:
-            print('Removing {} {} not expressing{} in {}.'.format(np.sum(missing), removed, expressed, data_type))
-            if use_rows:
-                # show gene name when the total of missing is less than 25
-                if np.sum(missing) < 25:
-                    print(liger_object.adata_list[i].obs.index[missing])
-                liger_object.adata_list[i] = liger_object.adata_list[i][~missing, :].copy()
-            else:
-                # show cell name when the total of missing is less than 25
-                if np.sum(missing) < 25:
-                    print(liger_object.adata_list[i].var.index[missing])
-                liger_object.adata_list[i] = liger_object.adata_list[i][:, ~missing].copy()
-
-    return liger_object
-"""

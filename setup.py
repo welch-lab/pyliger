@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(name='pyliger',
       version='0.1',
@@ -7,7 +7,7 @@ setup(name='pyliger',
       author='',
       author_email='',
       license='MIT',
-      packages=['pyliger'],
+      packages=find_packages(),
       keywords='LIGER',
       install_requires=[
               'pandas',

@@ -5,18 +5,18 @@ from anndata import AnnData
 
 def _merge_sparse_data_all(adata_list, library_names=None):
     """ Function to merge all sparse data into a single one
-    
+
     Function takes in a list of DGEs, with gene row names and cell column names,
     and merges them into a single DGE.
     Also adds library_names to cell_names if expected to be overlap (common with 10X barcodes)
-    
+
     Parameters
     ----------
     adata_list : AnnData
         List of AnnData objects which store expression matrices (gene by cell).
     library_names : list, optional
         (the default is None)
-    
+
     Returns
     -------
     merged_adata : AnnData
@@ -111,5 +111,7 @@ def merge_H5(file_list,
     return None
 
 
-
-
+def nonneg(x, eps=1e-16):
+    """ Given a input matrix, set all negative values to be zero """
+    x[x < eps] = eps
+    return x
