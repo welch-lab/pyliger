@@ -1,5 +1,5 @@
 import numpy as np
-import statsmodels.stats.multitest as smt
+
 from anndata import AnnData
 
 
@@ -88,12 +88,13 @@ def _remove_missing_obs(adata,
 
 ################################## For Use of hdf5 ################################
 def _h5_idx_generator(chunk_size, matrix_size):
+    """ """
     previous_idx = 0
     current_idx = chunk_size
-    num_chunk = np.ceil(matrix_size/chunk_size)
+    num_chunk = np.ceil(matrix_size/chunk_size).astype(int)
     iter = 0
     while current_idx <= matrix_size and iter < num_chunk:
-        yield previous_idx, current_idx
+        yield int(previous_idx), int(current_idx)
         previous_idx += chunk_size
         current_idx += chunk_size
         if current_idx > matrix_size:
