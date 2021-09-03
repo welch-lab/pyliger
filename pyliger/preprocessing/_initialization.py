@@ -1,4 +1,3 @@
-import os
 import numpy as np
 from anndata import AnnData
 from scipy.sparse import csr_matrix
@@ -6,12 +5,15 @@ from scipy.sparse import csr_matrix
 from ..pyliger import Liger
 from .._utilities import _remove_missing_obs, _h5_idx_generator, _merge_sparse_data_all
 
+from typing import List, Optional
 
-def create_liger(adata_list,
-                 make_sparse=True,
-                 take_gene_union=False,
-                 remove_missing=True,
-                 chunk_size=None):
+
+def create_liger(adata_list: List,
+                 make_sparse: bool = True,
+                 take_gene_union: bool = False,
+                 remove_missing: bool = True,
+                 chunk_size: Optional[int] = 1000
+                 ) -> Liger:
     """Create a liger object.
 
     This function initializes a liger object with the raw data passed in. It requires a list of
@@ -51,8 +53,12 @@ def create_liger(adata_list,
 
     """
     # On-disk mode (set for online learning approach)
-    if chunk_size:
-        liger_object = _create_liger_online(adata_list, chunk_size, remove_missing)
+    if adata_list[0].isbacked:
+        processed_list = []
+        for adata in adata_list:
+            processed_list.append(_initialization_online(adata, chunk_size, remove_missing))
+
+        liger_object = Liger(processed_list)
 
     # In-memory mode
     else:
@@ -61,46 +67,45 @@ def create_liger(adata_list,
     return liger_object
 
 
-def _create_liger_online(adata_list, chunk_size, remove_missing):
+def _initialization_online(adata, chunk_size, remove_missing):
     """"""
-    processed_list = []
-    for idx, adata in enumerate(adata_list):
 
-        # calculate row sum and sum of squares using raw data
-        gene_sum = np.zeros(adata.shape[1])
-        gene_sum_sq = np.zeros(adata.shape[1])
-        nUMI = np.zeros(adata.shape[0])
-        nGene = np.zeros(adata.shape[0])
-        for left, right in _h5_idx_generator(chunk_size, adata.shape[0]):
-            raw_data = adata.X[left:right, :]
-            gene_sum += np.ravel(np.sum(raw_data, axis=0))
-            gene_sum_sq += np.ravel(np.sum(raw_data.power(2), axis=0))
-            nUMI[left:right] = np.ravel(np.sum(raw_data, axis=1))
-            nGene[left:right] = raw_data.getnnz(axis=1)
+    # calculate row sum and sum of squares using raw data
+    gene_sum = np.zeros(adata.shape[1])
+    gene_sum_sq = np.zeros(adata.shape[1])
+    nUMI = np.zeros(adata.shape[0])
+    nGene = np.zeros(adata.shape[0])
+    for left, right in _h5_idx_generator(chunk_size, adata.shape[0]):
+        raw_data = adata.X[left:right, :]
+        gene_sum += np.ravel(np.sum(raw_data, axis=0))
+        gene_sum_sq += np.ravel(np.sum(raw_data.power(2), axis=0))
+        nUMI[left:right] = np.ravel(np.sum(raw_data, axis=1))
+        nGene[left:right] = raw_data.getnnz(axis=1)
 
-        # create results folder if not exists
-        if not os.path.exists('results'):
-            os.makedirs('results')
+    import os
+    # create results folder if not exists
+    if not os.path.exists('results'):
+        os.makedirs('results')
 
-        # save AnnData
-        file_path = './results/' + adata.uns['sample_name'] + '.h5ad'
-        if remove_missing:
-            idx_missing = gene_sum == 0
-        else:
-            idx_missing = np.repeat(False, adata.shape[1])
-        processed_adata = adata[:, ~idx_missing].copy(file_path)
-        processed_adata.var['gene_sum'] = gene_sum[~idx_missing]
-        processed_adata.var['gene_sum_sq'] = gene_sum_sq[~idx_missing]
-        processed_adata.obs['nUMI'] = nUMI
-        processed_adata.obs['nGene'] = nGene
+    # save AnnData
+    file_path = './results/' + adata.uns['sample_name'] + '.h5ad'
+    if remove_missing:
+        idx_missing = gene_sum == 0
+    else:
+        idx_missing = np.repeat(False, adata.shape[1])
+    processed_adata = adata[:, ~idx_missing].copy(file_path)
+    processed_adata.var['gene_sum'] = gene_sum[~idx_missing]
+    processed_adata.var['gene_sum_sq'] = gene_sum_sq[~idx_missing]
+    processed_adata.obs['nUMI'] = nUMI
+    processed_adata.obs['nGene'] = nGene
 
-        processed_list.append(processed_adata)
-
-    return Liger(processed_list)
+    return processed_adata
 
 
 def _create_liger_matrix(adata_list, make_sparse, take_gene_union, remove_missing):
     """"""
+    from scipy.sparse import csr_matrix
+
     num_samples = len(adata_list)
 
     # Make matrix sparse
@@ -152,3 +157,5 @@ def _create_liger_matrix(adata_list, make_sparse, take_gene_union, remove_missin
         liger_object.adata_list[idx].obs['dataset'] = np.repeat(adata.uns['sample_name'], adata.obs.index.shape[0])
 
     return liger_object
+
+

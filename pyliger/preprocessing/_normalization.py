@@ -1,12 +1,20 @@
 import h5sparse
 import numpy as np
+from pathlib import Path
 from sklearn.preprocessing import normalize as sp_normalize
 
+from ..pyliger import Liger
 from .._utilities import _h5_idx_generator, _remove_missing_obs
 
+from typing import Optional
 
-def normalize(liger_object,
-              chunk_size=None):
+
+PARRENT_PATH = Path(__file__).parent
+
+def normalize(liger_object: Liger,
+              remove_missing: bool = True,
+              chunk_size: Optional[int] = 1000
+              ) -> None:
     """Normalize raw datasets to row sums
 
     This function normalizes data to account for total gene expression across a cell.
@@ -35,12 +43,12 @@ def normalize(liger_object,
     for idx, adata in enumerate(liger_object.adata_list):
 
         # On-disk mode (set for online learning approach)
-        if chunk_size:
+        if adata.isbacked:
             norm_sum, norm_sum_sq = _normalize_online(adata, chunk_size)
 
         # In-memory mode
         else:
-            norm_data, norm_sum, norm_sum_sq = _normalize_matrix(adata)
+            norm_data, norm_sum, norm_sum_sq = _normalize_matrix(adata, remove_missing)
             liger_object.adata_list[idx].layers['norm_data'] = norm_data
 
         # save row sum and sum of squares for further use
@@ -74,9 +82,10 @@ def _normalize_online(adata, chunk_size):
     return norm_sum, norm_sum_sq
 
 
-def _normalize_matrix(adata):
+def _normalize_matrix(adata, remove_missing):
     """"""
-    adata = _remove_missing_obs(adata, slot_use='raw_data', use_rows=True)
+    if remove_missing:
+        adata = _remove_missing_obs(adata, slot_use='raw_data', use_rows=True)
     norm_data = sp_normalize(adata.X, axis=1, norm='l1')
     norm_sum = np.ravel(np.sum(norm_data, axis=0))
     norm_sum_sq = np.ravel(np.sum(norm_data.power(2), axis=0))

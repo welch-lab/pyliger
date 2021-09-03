@@ -12,17 +12,17 @@ from .._utilities import _h5_idx_generator
 
 
 def select_genes(liger_object,
-                 var_thresh=0.1,
-                 alpha_thresh=0.99,
+                 var_thresh: float = 0.1,
+                 alpha_thresh: float =0.99,
                  num_genes=None,
-                 tol=0.0001,
+                 tol: float =0.0001,
                  datasets_use=None,
                  combine='union',
                  keep_unique=False,
                  capitalize=False,
                  do_plot=False,
                  cex_use=0.3,
-                 chunk_size=None):
+                 chunk_size=1000):
     """Select a subset of informative genes
 
     This function identifies highly variable genes from each dataset and combines these gene sets
@@ -106,7 +106,7 @@ def select_genes(liger_object,
         gene_expr_mean = liger_object.adata_list[i].var['norm_mean'].to_numpy()
 
         # On-disk mode (set for online learning approach)
-        if chunk_size:
+        if adata.isbacked:
             gene_expr_var = _calc_var_online(adata, gene_expr_mean, chunk_size)
 
         # In-memory mode

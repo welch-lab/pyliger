@@ -5,10 +5,13 @@ from sklearn.utils.sparsefuncs import inplace_column_scale
 
 from .._utilities import _h5_idx_generator
 
+from typing import Optional
+
 
 def scale_not_center(liger_object,
                      remove_missing=True,
-                     chunk_size=None):
+                     chunk_size: Optional[int] = 1000
+                     ) -> None:
     """Scale genes by root-mean-square across cells
 
     This function scales normalized gene expression data after variable genes have been selected.
@@ -23,6 +26,7 @@ def scale_not_center(liger_object,
     remove_missing : bool, optional
         Whether to remove cells from scale_data with no gene expression
         (the default is True).
+    chunk_size :
 
     Returns
     -------
@@ -43,7 +47,7 @@ def scale_not_center(liger_object,
         var_gene_idx = adata.var.index.isin(liger_object.var_genes)
 
         # On-disk mode (set for online learning approach)
-        if chunk_size:
+        if adata.isbacked:
             liger_object.adata_list[idx] = _scale_online(adata, var_gene_idx, chunk_size)
 
         # In-memory mode
@@ -63,7 +67,12 @@ def _scale_online(adata, var_gene_idx, chunk_size):
             if 'scale_data' not in f.keys():
                 f.create_dataset('scale_data', data=scale_data, chunks=(chunk_size,), maxshape=(None,))
             else:
-                f['norm_data'].append(scale_data)
+                f['scale_data'].append(scale_data)
+
+    # slice adata after keeping a raw version
+    #adata.raw = adata
+    file_name = './results/' + adata.uns['sample_name'] + '.h5ad'
+    adata = adata[:, var_gene_idx].copy(filename=file_name)
 
     return adata
 
@@ -75,7 +84,7 @@ def _scale_matrix(adata, var_gene_idx):
     adata = adata[:, var_gene_idx].copy()
 
     # calculate scale data
-    scale_data = adata.layers['norm_data']
+    scale_data = adata.copy().layers['norm_data']
     scaler = 1 / np.sqrt(adata.var['norm_sum_sq'].to_numpy() / (adata.shape[0] - 1))
     inplace_column_scale(scale_data, scaler)
     adata.layers['scale_data'] = scale_data

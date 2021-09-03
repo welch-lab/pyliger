@@ -1,10 +1,16 @@
 import h5sparse
 import numpy as np
 
-from ..preprocessing import *
-from ._utilities import nonneg, nnlsm_blockpivot, _init_W, _init_V, _update_W_HALS, _update_V_HALS
+from tqdm import tqdm
+from scipy.sparse import vstack
+from ..preprocessing._initialization import _initialization_online
+from ..preprocessing._normalization import _normalize_online
+from ..preprocessing._scale import _scale_online
+from ._utilities import nnlsm_blockpivot, _init_W, _init_V_online, _update_W_HALS, _update_V_HALS, nonneg
 from .._utilities import _h5_idx_generator
 
+#from memory_profiler import profile
+#@profile
 def online_iNMF(liger_object,
                 X_new = None,
                 projection = False,
@@ -19,7 +25,9 @@ def online_iNMF(liger_object,
                 miniBatch_max_iters = 1,
                 miniBatch_size = 5000,
                 h5_chunk_size = 1000,
-                rand_seed = 1):
+                rand_seed = 1,
+                verbose = True
+                ) -> None:
     """Perform online iNMF on scaled datasets
 
     Perform online integrative non-negative matrix factorization to represent multiple single-cell datasets
@@ -46,232 +54,585 @@ def online_iNMF(liger_object,
         B_init:
         k:
         value_lambda:
+        max_epochs:
         miniBatch_max_iters:
         miniBatch_size:
         h5_chunk_size:
         rand_seed:
+        verbose:
 
     Returns
     -------
 
     """
-    pass
-    """
-    # if there is new dataset
-    if X_new:
-        # check whether X_new needs to be processed
-        #for adata in X_new:
-            #if 'scale_data' not in adata.layers.keys():
+    matrices_init_dict = {'W_init': W_init,
+                          'V_init': V_init,
+                          'H_init': H_init,
+                          'A_init': A_init,
+                          'B_init': B_init}
 
-        # assuming only one new dataset arrives at a time
-        #liger_object.adata_list = liger_object.adata_list + X_new
-        #TODO: deal with new datasets
-        pass
+    factorization_params = {'k': k,
+                            'value_lambda': value_lambda,
+                            'max_epochs': max_epochs,
+                            'miniBatch_max_iters': miniBatch_max_iters,
+                            'miniBatch_size': miniBatch_size,
+                            'h5_chunk_size': h5_chunk_size,
+                            'rand_seed': rand_seed}
 
-    ### Extract required information and initialize algorithm
-    num_files = liger_object.num_samples # number of total input hdf5 files
-    num_new_files = num_files if X_new else 1  # number of new input hdf5 files since last step
-    num_prev_files = 0 if X_new else num_files - num_new_files  # number of input hdf5 files processed in last step
-
-    file_idx = set(range(num_files))
-    file_idx_new = set(range(num_prev_files+1, num_files))
-    file_idx_prev = file_idx-file_idx_new
-
-    file_names = liger_object.sample_names
-    num_genes = liger_object.num_var_genes # number of the selected genes
-    gene_names = liger_object.var_genes # genes selected for analysis
-
-    cell_barcodes = [adata.obs.index.to_numpy() for adata in liger_object.adata_list] # cell barcodes for each dataset
-    num_cells = [adata.shape[0] for adata in liger_object.adata_list] # number of cells in each dataset
-    num_cells_new = num_cells[num_prev_files:num_files]
-
-    miniBatch_sizes = np.round((num_cells[i]/np.sum(num_cells[file_idx_new])) * miniBatch_size for i in file_idx_new:)
-    miniBatch_sizes_orig = miniBatch_sizes
-
-    Xs = []
-    for adata in liger_object.adata_list:
-        file_path = './results/' + adata.uns['sample_name'] + '.hdf5'
-        Xs.append(h5sparse.File(file_path,'r'))
-
-    if not projection:
-        # set seed
-        np.random.seed(seed=rand_seed)
-
-        # Initialization
-        if X_new is None:
-            W = _init_W(num_genes, k, rand_seed)
-            V = _init_V(num_cells, num_files, k, Xs)
-        else:
-            W = W_init if W_init else liger_object.W
-            V = V_init if V_init else liger_object.V
-
-        # H_i matrices initialization
-        if X_new is None:
-            H = []
-            H_miniBatch = []
-        else:
-            H_miniBatch = []
-
-        # A = HiHi^t, B = XiHit
-        A_old = []
-        B_old = []
-
-        if X_new is None:
-            A = 0
-            B = 0
-            A_old = 0
-            B_old = 0
-        else:
-            pass
-
-        iter = 1
-        epoch = np.repeat(0, num_files) # intialize the number of epoch for each dataset
-        epoch_prev = np.repeat(0, num_files) # intialize the previous number of epoch for each dataset
-        epoch_next = np.repeat(False, num_files)
-        sqrt_lambda = np.sqrt(value_lambda)
-        total_time = 0 # track the total amount of time used for the online learning
-
-        # chunk permutation
-        num_chunks, chunk_idx = _chunk_permutation(num_files, num_cells, file_idx_new, h5_chunk_size)
-
-        # print start information
-        print('Starting Online iNMF...')
-
-        total_iters = np.floor(np.sum(num_cells_new) * max_epochs / miniBatch_size)
-        while epoch[file_idx_new[0]] < max_epochs:
-            # track epochs
-
-            miniBatch_idx = _track_epoch(max_epochs, num_cells_new, epoch, epoch_next, epoch_prev)
-            miniBatch_idx = np.zeros(np.nan, num_files) # indices of samples in each dataest used for this iteration
-            # indices of samples in each dataest used for this iteration
-            if (max_epochs * num_cells_new[0] - (iter-1) * miniBatch_sizes[file_idx_new[0]]) >= miniBatch_sizes[file_idx_new[0]]:
-                for i in file_idx_new:
-                    epoch[i] = (iter * miniBatch_sizes[i]) // num_cells[i] # caculate the current epoch
-                    # if current iter cycles through the data and start a new cycle
-                    if epoch_prev[i] != epoch[i] and ((iter * miniBatch_sizes[i]) % num_cells[i]) != 0:
-                        epoch_next[i] = True
-                        epoch_prev[i] = epoch[i]
-
-                        # shuffle dataset before the next epoch
-                        _ = _dataset_shuffle()
-
-                        all_idx[i] = all_idx[i].pop(0) # remove the first element 0
-                        miniBatch_idx[i] =
-                    # if current iter finishes this cycle without start a a new cycle
-                    elif epoch_prev[i]:
-                        epoch_next[i] = True
-                    # if current iter stays within a single cycle
-                    else:
-                        miniBatch_idx[i]
-            else:
-                for i in file_idx_new:
-                    miniBatch_sizes[i]
-                    miniBatch_idx[i]
-                epoch[file_idx_new[0]] = max_epochs # last epoch
-
-            if len(miniBatch_idx[file_idx_new[0]] == miniBatch_sizes_orig[file_idx_new[0]]):
-                X_miniBatch = [Xs[miniBatch_idx[]]]
-
-                # update H_i by ANLS Hi_minibatch[[i]]
-                for i in file_idx_new:
-                    H_miniBatch = [nnlsm_blockpivot(A=np.hstack(((W + V[i]), sqrt_lambda * V[i])),
-                                B=np.hstack((X_miniBatch[i], np.zeros((miniBatch_sizes[i], num_genes)))))[
-                        0].transpose()]
-
-                # updata A and B matrices
-                if iter == 1:
-                    scale_
-
-
-                # update W, V_i by HALS
-                iter_miniBatch = 1
-                delta_miniBatch = np.inf
-                max_iters_miniBatch = miniBatch_max_iters
-
-                while iter_miniBatch <= max_iters_miniBatch:
-                    # update W matrix
-                    W = _update_W_HALS(A, B, W, V)
-                    #for j in range(k):
-                    #    W_update_numerator = np.repeat(0, num_genes)
-                    #    W_update_denominator = 0
-                    #    for i in file_idx:
-                    #        W_update_numerator = W_update_numerator + B[i][:, j] - ((W + V[i]) @ A[i])[:, j]
-                    #        W_update_denominator += A[i][j, j]
-                    #    W[:, j] = nonneg(W[:, j] + W_update_numerator / W_update_denominator)
-
-                    # update V matrix
-                    V[file_idx_new] = _update_V_HALS(A, B, W, V[file_idx_new], value_lambda)
-                    #for j in range(k):
-                    #    for i in file_idx_new:
-                    #        V[i][:, j] = nonneg(
-                    #            V[i][:, j] + (B[i][:, j] - (W + (1 + value_lambda) * V[i]) @ A[i][:, j])
-                    #            / ((1 + value_lambda) * A[i][j, j]))
-
-                    iter_miniBatch += 1
-
-                epoch_next = np.repeat(False, num_files) # reset epoch change indicator
-                iter += 1
-
-        print('Calculate metagene loadings...')
-        H
-
+    # Online Learning Scenario 1
+    if X_new is None:
+        if verbose:  # print start information
+            print('Starting Online iNMF...')
+        _online_iNMF_from_scratch(liger_object, verbose, matrices_init_dict, factorization_params)
     else:
-        print('Metagene projection')
+        # check whether X_new needs to be processed
+        for idx, adata in enumerate(X_new):
+            if 'scale_data' not in adata.layers.keys():
+                X_new[idx] = _preprocessing(adata, h5_chunk_size, liger_object.var_genes)
 
-    # Save results into the liger_object
-    for i in range(num_files):
-        liger_object.adata_list[i].obsm['H'] = H[i]
-        liger_object.adata_list[i].varm['W'] = W.transpose()
-        liger_object.adata_list[i].varm['V'] = V[i].transpose()
-
-    # Close all files in the end
-    for file in Xs:
-        file.close()
-
-    return liger_object
-
-
-def _online_iNMF_from_scratch():
-
-
-    return
-
-def _online_iNMF_refine():
-    return
-
-def _online_iNMF(W, H, V, ):
-
-    return None
-
-
-def _update_cell_loading():
-    return None
-
-def _chunk_permutation(num_files, num_cells, file_idx_new, h5_chunk_size):
-    num_chunks = [np.ceil(num_cell/h5_chunk_size) for num_cell in num_cells]
-    chunk_idx = [np.random.permutation(num_chunk) for num_chunk in num_chunks]
-    #all_idx = [list(range(left, right)) for left, right in _h5_idx_generator(h5_chunk_size, num_cell) for num_cell in num_cells]
-
-    return num_chunks, chunk_idx
-
-
-def _track_epoch():
-
-    return
-
-
-def _dataset_shuffle():
-    miniBatch_idx[i] = all_idx[i][]
-    chunk_idx[i] =
-    all_idx[i] = 0
-    for j in chunk_idx[i]:
-        if j != num_chunks[i]:
-            all_idx[] =
+        # Online Learning Scenario 3
+        if projection:
+            if verbose:
+                print("Metagene projection")
+            _projection(liger_object, X_new, W_init, k, miniBatch_size)
+        # Online Learning Scenario 2
         else:
-            all_idx[] =
-
-
-def _projection():
+            _online_iNMF_refine(liger_object, X_new, verbose, matrices_init_dict, factorization_params)
 
     return None
+
+
+def _online_iNMF_from_scratch(liger_object,
+                              verbose,
+                              matrices_init_dict,
+                              factorization_params):
+    """ """
+    ### 0. Extract required information
+    # prepare basic dataset profiles
+    num_files = liger_object.num_samples  # number of total input hdf5 files
+    num_genes = len(liger_object.var_genes)  # number of variable genes
+    num_cells = [adata.shape[0] for adata in liger_object.adata_list]  # number of cells in each hdf5 files
+    prev_info = None
+    Xs = [_get_scale_data(adata) for adata in liger_object.adata_list]
+
+    #import scipy.io
+    #from scipy.sparse import csr_matrix
+    #Xs = [csr_matrix(scipy.io.mmread('/Users/lulu/Documents/GitHub/pyliger/results/stim.mtx').transpose()), csr_matrix(scipy.io.mmread('/Users/lulu/Documents/GitHub/pyliger/results/ctrl.mtx').transpose())]
+    #Xs = [csr_matrix(scipy.io.mmread('/Users/lulu/Desktop/cells.mtx').transpose())]
+
+    ### 1. Run Online_iNMF
+    W, Vs, A, B = _online_iNMF_cal_W_V(Xs, num_genes, num_cells, verbose, prev_info, **matrices_init_dict, **factorization_params)
+
+    Hs = _online_iNMF_cal_H(Xs, W, Vs, num_genes, num_cells, verbose,
+                            factorization_params['value_lambda'], factorization_params['miniBatch_size'])
+
+
+    ### 2. Sava results and close hdf5 files
+    for file in Xs:  # close all files in the end
+        if isinstance(file, h5sparse.h5sparse.File):
+            file.close()
+
+    for i in range(num_files):
+        liger_object.adata_list[i].obsm['H'] = Hs[i].transpose()
+        liger_object.adata_list[i].varm['W'] = W
+        liger_object.adata_list[i].varm['V'] = Vs[i]
+        liger_object.adata_list[i].varm['B'] = B[i]
+        liger_object.adata_list[i].uns['A'] = A[i]
+
+    return None
+
+
+def _online_iNMF_refine(liger_object,
+                        X_new,
+                        verbose,
+                        matrices_init_dict,
+                        factorization_params):
+    """ """
+    if verbose:
+        print('{} new datasets detected.'.format(len(X_new)))
+
+    ### 0. Extract required information
+    # prepare basic dataset profiles
+    num_genes = len(liger_object.var_genes)  # number of variable genes
+
+    if matrices_init_dict['W_init'] is None:
+        matrices_init_dict['W_init'] = liger_object.W
+    prev_info = {'A_prev': [adata.uns['A'] for adata in liger_object.adata_list],
+                 'B_prev': [adata.varm['B'] for adata in liger_object.adata_list],
+                 'V_prev': [adata.varm['V'] for adata in liger_object.adata_list]}
+
+    for i, adata in enumerate(X_new):
+        # open hdf5 files
+        X = [_get_scale_data(adata)]
+
+        #import scipy.io
+        #from scipy.sparse import csr_matrix
+        #X = [csr_matrix(scipy.io.mmread('/Users/lulu/Desktop/nuclei.mtx').transpose())]
+
+        num_cells = [adata.shape[0]]
+
+        # calculate W, V, H matrices for the new datasets
+        W, Vs, A, B = _online_iNMF_cal_W_V(X, num_genes, num_cells, verbose, prev_info, **matrices_init_dict, **factorization_params)
+
+        Hs = _online_iNMF_cal_H(X, W, Vs, num_genes, num_cells, verbose,
+                                factorization_params['value_lambda'], factorization_params['miniBatch_size'])
+
+        # Sava results and close hdf5 files
+        if isinstance(X[0], h5sparse.h5sparse.File):
+            X[0].close()
+        X_new[i].obsm['H'] = Hs[0].transpose()
+        X_new[i].varm['W'] = W
+        X_new[i].varm['V'] = Vs[0]
+        X_new[i].varm['B'] = B[0]
+        X_new[i].uns['A'] = A[0]
+
+        matrices_init_dict['W_init'] = W
+
+    # update H matrics for existing datasets
+    for i, adata in enumerate(liger_object.adata_list):
+        X = [_get_scale_data(adata)]
+        #X = [csr_matrix(scipy.io.mmread('/Users/lulu/Desktop/cells.mtx').transpose())]
+        Vs = [adata.varm['V']]
+        num_cells = [adata.shape[0]]
+        Hs = _online_iNMF_cal_H(X, W, Vs, num_genes, num_cells, verbose,
+                                factorization_params['value_lambda'], factorization_params['miniBatch_size'])
+
+        if isinstance(X[0], h5sparse.h5sparse.File):
+            X[0].close()
+        liger_object.adata_list[i].obsm['H'] = Hs[0].transpose()
+        liger_object.adata_list[i].varm['W'] = W
+
+    for adata in X_new:
+        liger_object.adata_list.append(adata)
+
+    return None
+
+
+def _projection(liger_object,
+                X_new,
+                W_init,
+                k,
+                miniBatch_size):
+    """"""
+    ### 0. Extract required information
+    # prepare basic dataset profiles
+    num_files = len(X_new)  # number of total input hdf5 files
+    num_genes = len(liger_object.var_genes)  # number of variable genes
+    num_cells = [adata.shape[0] for adata in X_new]  # number of cells in each hdf5 files
+
+    ### 1. Initialization (W, V_i, A(HiHi^t), B(XiHit))
+    W = liger_object.W if W_init is None else W_init
+
+    # open hdf5 files
+    Xs = [_get_scale_data(adata) for adata in X_new]
+
+    #import scipy.io
+    #from scipy.sparse import csr_matrix
+    #Xs = [csr_matrix(scipy.io.mmread('/Users/lulu/Desktop/nuclei.mtx').transpose())]
+
+    Hs = []
+    Vs = []
+    for i in range(num_files):
+        num_batch = np.ceil(num_cells[i] / miniBatch_size).astype(int)
+        H_miniBatch = []
+        for batch in range(num_batch):
+            if batch != num_batch:
+                X_miniBatch = Xs[i]['scale_data'][batch*miniBatch_size:(batch+1)*miniBatch_size].transpose().toarray()
+                #X_miniBatch = Xs[i][
+                #              batch * miniBatch_size:(batch + 1) * miniBatch_size].transpose().toarray()
+            else:
+                X_miniBatch = Xs[i]['scale_data'][batch*miniBatch_size:num_cells[i]].transpose().toarray()
+                #X_miniBatch = Xs[i][batch * miniBatch_size:num_cells[i]].transpose().toarray()
+
+            H_miniBatch.append(nnlsm_blockpivot(A=W, B=X_miniBatch)[0])
+
+        Hs.append(np.hstack(H_miniBatch))
+        Vs.append(np.zeros((num_genes, k)))
+
+    # Sava results and close hdf5 files
+    for i in range(num_files):
+        if isinstance(Xs[i], h5sparse.h5sparse.File):
+            Xs[i].close()
+        X_new[i].obsm['H'] = Hs[i].transpose()
+        X_new[i].varm['W'] = W
+        X_new[i].varm['V'] = Vs[i]
+
+        # add object into liger object TODO: think of another way of appending adata into liger object
+        liger_object.adata_list.append(X_new[i])
+
+    return None
+
+
+def _online_iNMF_cal_W_V(Xs,
+                         num_genes,
+                         num_cells,
+                         verbose,
+                         prev_info,
+                         W_init,
+                         V_init,
+                         H_init,
+                         A_init,
+                         B_init,
+                         k,
+                         value_lambda,
+                         max_epochs,
+                         miniBatch_max_iters,
+                         miniBatch_size,
+                         h5_chunk_size,
+                         rand_seed):
+        """ """
+        ### 1. Initialization (W, V_i, A(HiHi^t), B(XiHit))
+        num_files = len(Xs)
+
+        np.random.seed(seed=rand_seed)
+        W = _init_W(num_genes, k, rand_seed) if W_init is None else W_init
+        Vs = [_init_V_online(num_cells[i], k, Xs[i], h5_chunk_size, rand_seed) for i in range(num_files)] if V_init is None else V_init
+        A = [np.zeros((k, k)) for i in range(num_files)] if A_init is None else A_init  # A = HiHi^t
+        B = [np.zeros((num_genes, k)) for i in range(num_files)] if B_init is None else B_init  # B = XiHit
+
+        # save information older than 2 epochs
+        A_old = [np.zeros((k, k)) for i in range(num_files)]
+        B_old = [np.zeros((num_genes, k)) for i in range(num_files)]
+
+        ### 2. Iteration starts here
+        # determine batch size for each dataset
+        miniBatch_sizes = np.asarray(
+            [np.round((num_cells[i] / np.sum(num_cells)) * miniBatch_size).astype(int) for i in range(num_files)])
+
+        # determine total number of iterations
+        total_iters = np.floor(num_cells[0] * max_epochs / miniBatch_sizes[0]).astype(int)
+
+        # generate all slicing index for each iteration
+        all_idx = [_generate_idx(total_iters, miniBatch_sizes[i], max_epochs, h5_chunk_size, num_cells[i]) for i in
+                   range(num_files)]
+
+        epoch = 0
+        for iter in tqdm(range(total_iters)):
+            # track epochs
+            epoch_prev = epoch
+            epoch = ((iter + 1) * miniBatch_sizes[0]) // num_cells[0]
+
+            # cells from each dataset that are used in this iteration
+            Xs_miniBatch = []
+            for i in range(num_files):
+                miniBatch_idx = all_idx[i][iter]
+                X_miniBatch = vstack([Xs[i]['scale_data'][left:right] for left, right in miniBatch_idx])
+                #X_miniBatch = vstack([Xs[i][left:right] for left, right in miniBatch_idx]) ###########
+                Xs_miniBatch.append(X_miniBatch.transpose().toarray())
+
+            ## 1) update H_i_minibatch by ANLS
+            H_miniBatch = []
+            for i in range(num_files):
+                H_miniBatch.append(nnlsm_blockpivot(A=np.vstack(((W + Vs[i]), np.sqrt(value_lambda) * Vs[i])),
+                                                    B=np.vstack(
+                                                        (Xs_miniBatch[i], np.zeros((num_genes, miniBatch_sizes[i])))))[
+                                       0])
+
+            ## 2) updata A and B matrices
+            for i in range(num_files):
+                A[i], B[i], A_old[i], B_old[i] = _update_A_B(A[i], B[i], A_old[i], B_old[i], H_miniBatch[i],
+                                                             Xs_miniBatch[i], miniBatch_sizes[i], iter, epoch,
+                                                             epoch_prev)
+
+            ## 3) update W, V_i by HALS
+            iter_miniBatch = 1
+            while iter_miniBatch <= miniBatch_max_iters:
+                # update W
+                if prev_info is None:
+                    W = _update_W_HALS(A, B, W, Vs)
+                else:
+                    W = _update_W_HALS(prev_info['A_prev']+A, prev_info['B_prev']+B, W, prev_info['V_prev']+Vs)
+
+                # update V_i
+                Vs = _update_V_HALS(A, B, W, Vs, value_lambda)
+
+                iter_miniBatch += 1
+
+        return W, Vs, A, B
+
+
+def _online_iNMF_cal_H(Xs,
+                       W,
+                       Vs,
+                       num_genes,
+                       num_cells,
+                       verbose,
+                       value_lambda,
+                       miniBatch_size):
+    """"""
+    # Calculate metagene loadings (H metrics)
+    num_files = len(Xs)
+    if verbose:
+        print('Calculate metagene loadings...')
+
+    Hs = []
+    for i in range(num_files):
+        num_batch = np.ceil(num_cells[i] / miniBatch_size).astype(int)
+        H_miniBatch = []
+        for batch in range(num_batch):
+            if batch != num_batch:
+                X_miniBatch = Xs[i]['scale_data'][
+                              batch * miniBatch_size:(batch + 1) * miniBatch_size].transpose().toarray()
+                #X_miniBatch = Xs[i][batch * miniBatch_size:(batch + 1) * miniBatch_size].transpose().toarray()
+
+            else:
+                X_miniBatch = Xs[i]['scale_data'][batch * miniBatch_size:num_cells[i]].transpose().toarray()
+                #X_miniBatch = Xs[i][batch * miniBatch_size:num_cells[i]].transpose().toarray()
+
+            H_miniBatch.append(nnlsm_blockpivot(A=np.vstack(((W + Vs[i]), np.sqrt(value_lambda) * Vs[i])),
+                                                B=np.vstack(
+                                                    (X_miniBatch, np.zeros((num_genes, X_miniBatch.shape[1])))))[0])
+
+        Hs.append(np.hstack(H_miniBatch))
+
+    return Hs
+
+
+def _generate_idx(num_iter, miniBatch_size, max_epochs, h5_chunk_size, num_cell):
+    """helper function to generate miniBatch index for each iteration"""
+    idx_dict = {}
+
+    # permutate chunks for all+1 epochs (one more set for extreme case)
+    all_idx = np.concatenate([_chunk_permutation(num_cell, h5_chunk_size) for j in range(max_epochs+1)])
+
+    # assign chunks for each iteration
+    for i in range(num_iter):
+        total_sum = 0
+        temp_list = []
+        while total_sum < miniBatch_size:
+            left, right = all_idx[0]
+            diff = right - left
+            missing = int(miniBatch_size - total_sum)
+            if diff < missing:
+                temp_list.append((left, right))
+                all_idx = all_idx[1:]
+                total_sum += diff
+            elif diff == missing:
+                temp_list.append((left, right))
+                all_idx = all_idx[1:]
+                total_sum += diff
+            else:
+                temp_list.append((left, left + missing))
+                all_idx[0] = [left + missing, right]
+                total_sum += missing
+        idx_dict[i] = temp_list
+
+    return idx_dict
+
+
+def _chunk_permutation(num_cell, h5_chunk_size):
+    """helper function to permutate chunks"""
+    #all_chunks = np.random.permutation([(left, right) for left, right in _h5_idx_generator(h5_chunk_size, num_cell)])
+    all_chunks = np.asarray([(left, right) for left, right in _h5_idx_generator(h5_chunk_size, num_cell)])
+
+    return all_chunks
+
+
+def _get_scale_data(adata):
+    """helper function to open hdf5 files if AnnData is on-disk, otherwise get scale data from AnnData object"""
+    if adata.isbacked:
+        return h5sparse.File('./results/' + adata.uns['sample_name'] + '.hdf5', 'r')
+    else:
+        return adata.layers
+
+
+def _update_A_B(A, B, A_old, B_old, H_miniBatch, X_miniBatch, miniBatch_size, iter, epoch, epoch_prev):
+    """helper function to update A B matrices"""
+    if iter == 0:
+        scale_param = 0
+    elif iter == 1:
+        scale_param = 1 / miniBatch_size
+    else:
+        scale_param = (iter - 1) / iter
+
+    if epoch > 0 and epoch - epoch_prev == 1:  # remove information older than 2 epochs
+        A = A - A_old
+        A_old = scale_param * A
+        B = B - B_old
+        B_old = scale_param * B
+    else:  # otherwise scale the old information
+        A_old = scale_param * A_old
+        B_old = scale_param * B_old
+
+    t_H_miniBatch = H_miniBatch.transpose()
+    A = scale_param * A + (H_miniBatch @ t_H_miniBatch) / miniBatch_size
+    B = scale_param * B + (X_miniBatch @ t_H_miniBatch) / miniBatch_size
+
+    # replace the zero values in the diagonal of A with 1e-15
+    A_diag = np.diagonal(A).copy()
+    A_diag[A_diag == 0] = 1e-15
+    np.fill_diagonal(A, A_diag)
+
+    return A, B, A_old, B_old
+
+
+def _preprocessing(adata, h5_chunk_size, var_genes):
+    """helper function to preprocess AnnData object
+    TODO: in the future, consider have preprocessing support for AnnData objects"""
+    # initialization
+    adata = _initialization_online(adata, h5_chunk_size, remove_missing=False)
+    # normalization
+    norm_sum, norm_sum_sq = _normalize_online(adata, h5_chunk_size)
+    norm_sum = nonneg(norm_sum)  # to avoid zero-division
+    norm_sum_sq = nonneg(norm_sum_sq)  # to avoid zero-division
+    adata.var['norm_sum'] = norm_sum
+    adata.var['norm_sum_sq'] = norm_sum_sq
+    adata.var['norm_mean'] = norm_sum / adata.shape[0]
+    # scale
+    var_gene_idx = adata.var.index.isin(var_genes)
+    adata = _scale_online(adata, var_gene_idx, h5_chunk_size)
+
+    return adata
+"""
+    ### 1. Initialization (W, V_i, A(HiHi^t), B(XiHit))
+    np.random.seed(seed=rand_seed)
+    W = _init_W(num_genes, k, rand_seed) if W_init is None else W_init
+    Vs = [_init_V_online(num_cells[i], k, Xs[i], h5_chunk_size, rand_seed) for i in range(num_files)] if V_init is None else V_init
+    A = [np.zeros((k, k)) for i in range(num_files)] if A_init is None else A_init # A = HiHi^t
+    B = [np.zeros((num_genes, k)) for i in range(num_files)] if B_init is None else B_init # B = XiHit
+
+    # save information older than 2 epochs
+    A_old = [np.zeros((k, k)) for i in range(num_files)]
+    B_old = [np.zeros((num_genes, k)) for i in range(num_files)]
+
+    ### 2. Iteration starts here
+    # determine batch size for each dataset
+    miniBatch_sizes = np.asarray([np.round((num_cells[i] / np.sum(num_cells)) * miniBatch_size).astype(int) for i in range(num_files)])
+
+    # determine total number of iterations
+    total_iters = np.floor(num_cells[0] * max_epochs / miniBatch_sizes[0]).astype(int)
+
+    # generate all slicing index for each iteration
+    all_idx = [_generate_idx(total_iters, miniBatch_sizes[i], max_epochs, h5_chunk_size, num_cells[i]) for i in range(num_files)]
+
+    epoch = 0
+    for iter in tqdm(range(total_iters)):
+        # track epochs
+        epoch_prev = epoch
+        epoch = ((iter+1) * miniBatch_sizes[0]) // num_cells[0]
+
+        # cells from each dataset that are used in this iteration
+        Xs_miniBatch = []
+        for i in range(num_files):
+            miniBatch_idx = all_idx[i][iter]
+            X_miniBatch = vstack([Xs[i]['scale_data'][left:right] for left, right in miniBatch_idx])
+            #X_miniBatch = vstack([Xs[i][left:right] for left, right in miniBatch_idx]) ###########
+            Xs_miniBatch.append(X_miniBatch.transpose().toarray())
+
+        ## 1) update H_i_minibatch by ANLS
+        H_miniBatch = []
+        for i in range(num_files):
+            H_miniBatch.append(nnlsm_blockpivot(A=np.vstack(((W + Vs[i]), np.sqrt(value_lambda) * Vs[i])),
+                                                B=np.vstack((Xs_miniBatch[i], np.zeros((num_genes, miniBatch_sizes[i])))))[0])
+
+        ## 2) updata A and B matrices
+        for i in range(num_files):
+            A[i], B[i], A_old[i], B_old[i] = _update_A_B(A[i], B[i], A_old[i], B_old[i], H_miniBatch[i], Xs_miniBatch[i], miniBatch_sizes[i], iter, epoch, epoch_prev)
+
+        ## 3) update W, V_i by HALS
+        iter_miniBatch = 1
+        while iter_miniBatch <= miniBatch_max_iters:
+            W = _update_W_HALS(A, B, W, Vs)  # update W
+            Vs = _update_V_HALS(A, B, W, Vs, value_lambda)  # update V_i
+
+            iter_miniBatch += 1
+
+    # Calculate metagene loadings (H metrics)
+    if verbose:
+        print('Calculate metagene loadings...')
+
+    Hs = []
+    for i in range(num_files):
+        num_batch = np.ceil(num_cells[i] / miniBatch_size).astype(int)
+        H_miniBatch = []
+        for batch in range(num_batch):
+            if batch != num_batch:
+                X_miniBatch = Xs[i]['scale_data'][batch*miniBatch_size:(batch+1)*miniBatch_size].transpose().toarray()
+                #X_miniBatch = Xs[i][batch * miniBatch_size:(batch + 1) * miniBatch_size].transpose().toarray()
+            else:
+                X_miniBatch = Xs[i]['scale_data'][batch*miniBatch_size:num_cells[i]].transpose().toarray()
+                #X_miniBatch = Xs[i][batch * miniBatch_size:num_cells[i]].transpose().toarray()
+
+            H_miniBatch.append(nnlsm_blockpivot(A=np.vstack(((W + Vs[i]), np.sqrt(value_lambda) * Vs[i])),
+                                                B=np.vstack((X_miniBatch, np.zeros((num_genes, X_miniBatch.shape[1])))))[0])
+
+        Hs.append(np.hstack(H_miniBatch))
+        
+        
+        ### 1. Initialization (W, V_i, A(HiHi^t), B(XiHit))
+        np.random.seed(seed=rand_seed)
+        W = _init_W(num_genes, k, rand_seed) if W_init is None else W_init
+        V = _init_V_online(num_cells, k, X, h5_chunk_size, rand_seed) if V_init is None else V_init
+        A = np.zeros((k, k)) if A_init is None else A_init  # A = HiHi^t
+        B = np.zeros((num_genes, k)) if B_init is None else B_init  # B = XiHit
+
+        # save information older than 2 epochs
+        A_old = np.zeros((k, k))
+        B_old = np.zeros((num_genes, k))
+
+        # determine total number of iterations
+        total_iters = np.floor(num_cells[0] * max_epochs / miniBatch_size).astype(int)
+
+        # generate all slicing index for each iteration
+        all_idx = _generate_idx(total_iters, miniBatch_size, max_epochs, h5_chunk_size, num_cells[i])
+
+        ### 2. Iteration starts here
+        epoch = 0
+        for iter in tqdm(range(total_iters)):
+            # track epochs
+            epoch_prev = epoch
+            epoch = ((iter+1) * miniBatch_size) // num_cells[i]
+
+            # cells that are used in this iteration
+            miniBatch_idx = all_idx[iter]
+            X_miniBatch = vstack([X['scale_data'][left:right] for left, right in miniBatch_idx])
+            # X_miniBatch = vstack([X[left:right] for left, right in miniBatch_idx]) ###########
+            X_miniBatch = X_miniBatch.transpose().toarray()
+
+            ## 1) update H_i_minibatch by ANLS
+            H_miniBatch = nnlsm_blockpivot(A=np.vstack(((W + V), np.sqrt(value_lambda) * V)),
+                                           B=np.vstack((X_miniBatch, np.zeros((num_genes, miniBatch_size)))))[0]
+
+            ## 2) updata A and B matrices
+            A, B, A_old, B_old = _update_A_B(A, B, A_old, B_old, H_miniBatch, X_miniBatch, miniBatch_size, iter, epoch, epoch_prev)
+
+            ## 3) update W, V_i by HALS
+            iter_miniBatch = 1
+            while iter_miniBatch <= miniBatch_max_iters:
+                W = _update_W_HALS([A], [B], W, [V])  # update W
+                V = _update_V_HALS([A], [B], W, [V], value_lambda)[0]  # update V
+
+                iter_miniBatch += 1
+
+
+        # Calculate metagene loadings (H metrics)
+        if verbose:
+            print('Calculate metagene loadings...')
+
+        Hs = []
+        for i in range(num_files):
+            num_batch = np.ceil(num_cells[i] / miniBatch_size).astype(int)
+            H_miniBatch = []
+            for batch in range(num_batch):
+                if batch != num_batch:
+                    X_miniBatch = Xs[i]['scale_data'][batch*miniBatch_size:(batch+1)*miniBatch_size].transpose().toarray()
+                    #X_miniBatch = Xs[i][
+                    #              batch * miniBatch_size:(batch + 1) * miniBatch_size].transpose().toarray()
+                else:
+                    X_miniBatch = Xs[i]['scale_data'][batch*miniBatch_size:num_cells[i]].transpose().toarray()
+                    #X_miniBatch = Xs[i][batch * miniBatch_size:num_cells[i]].transpose().toarray()
+
+                H_miniBatch.append(nnlsm_blockpivot(A=np.vstack(((W + Vs[i]), np.sqrt(value_lambda) * Vs[i])),
+                                                    B=np.vstack((X_miniBatch, np.zeros((num_genes, X_miniBatch.shape[1])))))[0])
+
+            Hs.append(np.hstack(H_miniBatch))
+            
+                    # Close all files in the end
+        X.close()
+
+        # Sava results and close hdf5 files
+        X_new[i].obsm['H'] = Hs[i].transpose()
+        X_new[i].varm['W'] = W
+        X_new[i].varm['V'] = V
+
 """
