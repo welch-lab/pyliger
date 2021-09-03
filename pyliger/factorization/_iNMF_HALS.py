@@ -56,10 +56,6 @@ def iNMF_HALS(liger_object,
 
     num_samples = len(liger_object.adata_list)
     X = [adata.layers['scale_data'].transpose() for adata in liger_object.adata_list]
-    #X = []
-    #for adata in liger_object.adata_list:
-    #    idx = adata.uns['var_gene_idx']
-    #    X.append(adata.layers['scale_data'][:, idx].transpose())
 
     num_cells = [X[i].shape[1] for i in range(num_samples)]
     num_genes = X[0].shape[0]
@@ -72,7 +68,7 @@ def iNMF_HALS(liger_object,
     while num_rep < nrep:
         # Initialization
         V = _init_V(num_cells, num_samples, k, X)
-        W = _init_W(num_genes, k)
+        W = _init_W(num_genes, k, rand_seed)
         H = _init_H(num_cells, num_samples, k)
 
         # Initial training obj
@@ -152,4 +148,4 @@ def iNMF_HALS(liger_object,
         liger_object.adata_list[i].varm['W'] = final_W
         liger_object.adata_list[i].varm['V'] = final_V[i]
 
-    return liger_object
+    return None

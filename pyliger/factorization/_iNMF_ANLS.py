@@ -1,4 +1,3 @@
-import time
 import numpy as np
 
 from tqdm import tqdm
@@ -50,6 +49,7 @@ def optimize_ALS(liger_object,
             Initial values to use for H matrices.
         W_init(): optional, (default None)
             Initial values to use for W matrix.
+
         V_init(): optional, (default None)
             Initial values to use for V matrices.
         rand_seed(seed): optional, (default 1)
@@ -70,26 +70,25 @@ def optimize_ALS(liger_object,
         >>> ligerex = pyliger.scale_not_center(ligerex)
         >>> ligerex = pyliger.optimize_ALS(ligerex, k = 20, value_lambda = 5, nrep = 3) # get factorization using three restarts and 20 factors
     """
-
-    N = liger_object.num_samples
-
-    ns = [adata.shape[0] for adata in liger_object.adata_list]
+    ### 0. Extract required information
+    # prepare basic dataset profiles
+    N = liger_object.num_samples  # number of total input hdf5 files
+    ns = [adata.shape[0] for adata in liger_object.adata_list]  # number of cells in each hdf5 files
+    num_genes = len(liger_object.var_genes)  # number of variable genes
     X = [adata.layers['scale_data'].toarray() for adata in liger_object.adata_list]
-
-    num_genes = liger_object.num_var_genes
 
     if k >= np.min(ns):
         raise ValueError('Select k lower than the number of cells in smallest dataset: {}'.format(np.min(ns)))
 
-    if k >= len(liger_object.var_genes):
+    if k >= num_genes:
         raise ValueError('Select k lower than the number of variable genes: {}'.format(len(liger_object.var_genes)))
 
     best_obj = np.Inf
-    run_stats = np.zeros((nrep, 2))
 
     for j in range(nrep):
         np.random.seed(seed=rand_seed + j - 1)
-        start_time = time.time()
+
+        ### 1. Initialization (W, V_i, H_i)
         W = np.abs(np.random.uniform(0, 2, (k, num_genes)))
         V = [np.abs(np.random.uniform(0, 2, (k, num_genes))) for i in range(N)]
         H = [np.abs(np.random.uniform(0, 2, (ns[i], k))) for i in range(N)]
@@ -115,22 +114,20 @@ def optimize_ALS(liger_object,
 
         obj0 = obj_train_approximation + value_lambda * obj_train_penalty
 
-        # iters = 0
-        # while delta > thresh and iters < max_iters:
+        ### 2. Iteration starts here
         for iter in tqdm(range(max_iters)):
             if delta > thresh:
-                # update H matrix
+                ## 1) update H matrix
                 for i in range(N):
                     H[i] = nnlsm_blockpivot(A=np.hstack(((W + V[i]), sqrt_lambda * V[i])).transpose(),
-                                            B=np.hstack((X[i], np.zeros((ns[i], num_genes)))).transpose())[
-                        0].transpose()
+                                            B=np.hstack((X[i], np.zeros((ns[i], num_genes)))).transpose())[0].transpose()
 
-                # update V matrix
+                ## 2) update V matrix
                 for i in range(N):
                     V[i] = nnlsm_blockpivot(A=np.vstack((H[i], sqrt_lambda * H[i])),
                                             B=np.vstack(((X[i] - H[i] @ W), np.zeros((ns[i], num_genes)))))[0]
 
-                # update W matrix
+                ## 3) update W matrix
                 W = nnlsm_blockpivot(A=np.vstack(H), B=np.vstack([(X[i] - H[i] @ V[i]) for i in range(N)]))[0]
 
                 obj_train_prev = obj0
@@ -154,11 +151,9 @@ def optimize_ALS(liger_object,
         if print_obj:
             print('Objective: {}'.format(best_obj))
 
-    #print('Best results with seed {}.'.format(best_seed))
+    #liger_object.W = final_W.transpose()
 
-    liger_object.W = final_W.transpose()
-
-    ## Save results into the liger_object
+    ### 3. Save results into the liger_object
     for i in range(N):
         liger_object.adata_list[i].obsm['H'] = final_H[i]
         liger_object.adata_list[i].varm['W'] = final_W.transpose()

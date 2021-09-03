@@ -1,6 +1,5 @@
 from ._louvain import louvain_cluster
 from ._leiden import leiden_cluster
-from ._quantile_norm import quantile_norm
 
 
 #####TODO

@@ -3,6 +3,7 @@ import scipy.sparse as sps
 import numpy.linalg as nla
 import scipy.linalg as sla
 from numba import jit, njit, prange
+from .._utilities import _h5_idx_generator
 
 
 def nonneg(x, eps=1e-16):
@@ -11,8 +12,11 @@ def nonneg(x, eps=1e-16):
     return x
 
 
-def _init_W(num_genes, k):
+def _init_W(num_genes, k, rand_seed):
     """helper function to initialize a W matrix"""
+    # set seed
+    np.random.seed(seed=rand_seed)
+
     W = np.abs(np.random.uniform(0, 2, (num_genes, k)))
 
     # normalize columns of dictionaries
@@ -21,13 +25,56 @@ def _init_W(num_genes, k):
     return W
 
 
-def _init_V(num_cells, num_samples, k, X):
-    """helper function to initialize a V matrix"""
-    # pick k sample from datasets as initial H matrix
-    V = [X[i][:, np.random.choice(list(range(num_cells[i])), k)].toarray() for i in range(num_samples)]
+def _init_V(num_cells, num_samples, k, Xs):
+    """helper function to initialize a V matrix for in-memory mode"""
+    # pick k sample from datasets as initial V matrix
+    V = [Xs[i][:, np.random.choice(list(range(num_cells[i])), k)].toarray() for i in range(num_samples)]
 
     # normalize columns of dictionaries
     V = [V[i] / np.sqrt(np.sum(np.square(V[i]), axis=0)) for i in range(num_samples)]
+
+    return V
+"""
+def _init_V_online(num_cells, num_samples, k, Xs, chunk_size, rand_seed):
+
+    np.random.seed(seed=rand_seed)
+
+    Vs = []
+    for i in range(num_samples):
+        # pick k sample from datasets as initial H matrix
+        idx = np.sort(np.random.choice(list(range(num_cells[i])), k))
+        V = []
+        for left, right in _h5_idx_generator(chunk_size, num_cells[i]):
+            select_idx = idx[(idx >= left) & (idx < right)] - left  # shift index because of handling chunk each time
+            if select_idx.shape[0] > 0:  # only load chunks whose indexes are picked
+                X = Xs[i]['scale_data'][left:right]
+                V.append(X[select_idx, :])
+        V = sps.vstack(V).transpose().toarray()
+
+        # normalize columns of dictionaries
+        V = V / np.sqrt(np.sum(np.square(V), axis=0))
+
+        Vs.append(V)
+
+    return Vs
+"""
+
+def _init_V_online(num_cell, k, X, chunk_size, rand_seed):
+    """helper function to initialize a V matrix for online learning"""
+    np.random.seed(seed=rand_seed)
+
+    # pick k sample from datasets as initial H matrix
+    idx = np.sort(np.random.choice(list(range(num_cell)), k))
+    V = []
+    for left, right in _h5_idx_generator(chunk_size, num_cell):
+        select_idx = idx[(idx >= left) & (idx < right)] - left  # shift index because of handling chunk each time
+        if select_idx.shape[0] > 0:  # only load chunks whose indexes are picked
+            X_chunk = X['scale_data'][left:right]
+            V.append(X_chunk[select_idx, :])
+    V = sps.vstack(V).transpose().toarray()
+
+    # normalize columns of dictionaries
+    V = V / np.sqrt(np.sum(np.square(V), axis=0))
 
     return V
 
@@ -37,10 +84,13 @@ def _init_H(num_cells, num_samples, k):
     H = [np.random.uniform(0, 2, (k, num_cells[i])) for i in range(num_samples)]
     return H
 
+def _init_Hi():
+    """"""
+    return None
 
 def _update_W_HALS(A, B, W, V):
     """helper function to update W matrix by HALS
-    A = HiHi^t, B = XiHit"""
+    A = HiHi^t, B = XiHit, W = gene x k, V = [gene x k]"""
     for j in range(W.shape[1]):
         W_update_numerator = np.zeros(W.shape[0])
         W_update_denominator = 0.0
@@ -54,7 +104,7 @@ def _update_W_HALS(A, B, W, V):
 
 def _update_V_HALS(A, B, W, V, value_lambda):
     """helper function to update V matrix by HALS
-    A = HiHi^t, B = XiHit"""
+    A = HiHi^t, B = XiHit, W = gene x k, V = [gene x k]"""
     for j in range(W.shape[1]):
         for i in range(len(V)):
             V[i][:, j] = nonneg(V[i][:, j] + (B[i][:, j] - (W + (1 + value_lambda) * V[i]) @ A[i][:, j]) / ((1 + value_lambda) * A[i][j, j]))
@@ -145,7 +195,7 @@ def nnlsm_blockpivot(A, B, is_input_prod=False, init=None):
     (n, k) = AtB.shape
     MAX_ITER = n * 5
 
-    if init is not  None:
+    if init is not None:
         PassSet = init > 0
         X, num_cholesky, num_eq = normal_eq_comb(AtA, AtB, PassSet)
         Y = AtA.dot(X) - AtB
@@ -213,9 +263,9 @@ def nnlsm_blockpivot(A, B, is_input_prod=False, init=None):
             AtA, AtB[:, not_opt_cols], PassSet[:, not_opt_cols])
         num_cholesky += temp_cholesky
         num_eq += temp_eq
-        X[abs(X) < 1e-12] = 0
+        X[abs(X) < 1e-16] = 0
         Y[:, not_opt_cols] = AtA.dot(X[:, not_opt_cols]) - AtB[:, not_opt_cols]
-        Y[abs(Y) < 1e-12] = 0
+        Y[abs(Y) < 1e-16] = 0
 
         not_opt_mask = np.tile(not_opt_colset, (n, 1))
         not_opt_set = np.logical_and(

@@ -2,20 +2,9 @@ import numpy as np
 import igraph as ig
 from numba import njit
 from annoy import AnnoyIndex
+from pynndescent import NNDescent
 from scipy.sparse import csr_matrix
 from sklearn.neighbors import NearestNeighbors
-
-
-def refine_clusts(H, clusts, k, use_ann, num_trees=None):
-    """helper function for refining clusters related to function quantile_norm """
-    if use_ann:
-        H_knn = run_ann(H, k, num_trees)
-    else:
-        H_knn = run_knn(H, k)
-
-    clusts = cluster_vote(clusts, H_knn, k)
-
-    return clusts
 
 
 def run_knn(H, k):
@@ -50,26 +39,27 @@ def run_ann(H, k, num_trees=None):
     t.build(num_trees)
 
     # create knn indices matrices
-    for i in range(num_observations):
-        if i == 0:
-            H_knn = np.array(t.get_nns_by_vector(H[i], k))
-        else:
-            H_knn = np.vstack((H_knn, t.get_nns_by_vector(H[i], k)))
+    H_knn = np.vstack([t.get_nns_by_vector(H[i], k) for i in range(num_observations)])
+    #for i in range(num_observations):
+    #    if i == 0:
+    #        H_knn = np.array(t.get_nns_by_vector(H[i], k))
+    #    else:
+    #        H_knn = np.vstack((H_knn, t.get_nns_by_vector(H[i], k)))
 
     return H_knn
 
-"""
-def run_ann(H, k, num_trees=None):
-    from pynndescent import NNDescent
+
+def run_pynndescent(H, k, num_trees=None):
+
     num_observations = H.shape[0]
 
     index = NNDescent(H)
     H_knn = index.query(H, k=k)
 
     return H_knn
-"""
 
-#@njit
+
+@njit
 def cluster_vote(clusts, H_knn, k):
     """"""
     for i in range(H_knn.shape[0]):
@@ -91,6 +81,18 @@ def cluster_vote(clusts, H_knn, k):
                     max_clust = key
                     max_count = value
         clusts[i] = max_clust
+    return clusts
+
+
+def refine_clusts(H, clusts, k, use_ann, num_trees=None):
+    """helper function for refining clusters related to function quantile_norm """
+    if use_ann:
+        H_knn = run_ann(H, k, num_trees)
+    else:
+        H_knn = run_knn(H, k)
+
+    clusts = cluster_vote(clusts, H_knn, k)
+
     return clusts
 
 
@@ -130,3 +132,13 @@ def build_igraph(snn):
     g.es['weight'] = weights
 
     return g
+
+
+def _assign_cluster(cluster, liger_object):
+    """helper function to assign cluster to each dataset after community detection"""
+    cluster = np.ravel(cluster)
+    idx = 0
+    for i, adata in enumerate(liger_object.adata_list):
+        liger_object.adata_list[i].obs['cluster'] = cluster[idx:(idx + adata.shape[0])]
+        idx += adata.shape[0]
+    return None

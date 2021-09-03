@@ -1,7 +1,7 @@
 import leidenalg
 import numpy as np
 
-from ._utilities import run_knn, compute_snn, build_igraph
+from ._utilities import run_knn, compute_snn, build_igraph, _assign_cluster
 
 
 def leiden_cluster(liger_object,
@@ -60,7 +60,8 @@ def leiden_cluster(liger_object,
     ### 3. Run louvain
     np.random.seed(random_seed)
     max_quality = -1
-    for i in range(n_starts):  # random starts to improve stability
+    # random starts to improve stability
+    for i in range(n_starts):
         seed = np.random.randint(0, 1000)
         kwargs = {'weights': g.es['weight'], 'resolution_parameter': resolution, 'seed': seed}  # parameters setting
         part = leidenalg.find_partition(g, leidenalg.RBConfigurationVertexPartition, n_iterations=n_iterations,
@@ -71,10 +72,6 @@ def leiden_cluster(liger_object,
             max_quality = part.quality()
 
     ### 4. Assign cluster results
-    cluster = np.array(cluster).flatten()
-    idx = 0
-    for i in range(len(liger_object.adata_list)):
-        liger_object.adata_list[i].obs['cluster'] = cluster[idx:(idx + liger_object.adata_list[i].shape[0])]
-        idx = liger_object.adata_list[i].shape[0]
+    _assign_cluster(cluster, liger_object)
 
     return None

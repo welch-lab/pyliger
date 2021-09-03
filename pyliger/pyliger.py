@@ -54,13 +54,12 @@ class Liger(object):
             Version of package used to create object
     """
     
-    __slots__ = ('adata_list', 'pending_list', 'W', 'cell_data', 'var_genes', 'tsne_coords',
+    __slots__ = ('adata_list', 'cell_data', 'var_genes', 'tsne_coords',
                  'alignment_clusters', 'agg_data', 'parameters',
                  'snf', 'version')
     
-    def __init__(self, adata_list=[], pending_list=[]):
+    def __init__(self, adata_list=[]):
         self.adata_list = adata_list
-        self.pending_list = pending_list
 
     #@property
     #def adata_list(self):
@@ -91,10 +90,10 @@ class Liger(object):
         #return [adata.varm['V'][adata.uns['var_gene_idx'], :] for adata in self.adata_list]
         return [adata.varm['V'] for adata in self.adata_list]
 
-    #@property
-    #def W(self):
-    #    """W is the shared component. Only return one is enough."""
-    #    return self.adata_list[0].varm['W'][self.adata_list[0].uns['var_gene_idx'], :]
+    @property
+    def W(self):
+        """W is the shared component. Only return one is enough."""
+        return self.adata_list[0].varm['W']
 
     def show(self):
         print("An object of class liger with {} datasets and {} total cells.".format(self.num_samples),len(self.cell_data))
@@ -150,27 +149,6 @@ class Liger(object):
         else:
             return obs_values
 
-    def get_obsm(self, obsm_name, dataset_use='all', combine=True):
-        """
-
-        Args:
-            obsm_name:
-            dataset_use:
-
-        Returns:
-
-        """
-        if dataset_use == 'all':
-            if combine:
-                obsm_values = np.concatenate([adata.obsm[obsm_name] for adata in self.adata_list])
-            else:
-                obsm_values = [adata.obsm[obsm_name] for adata in self.adata_list]
-        else:
-            adata = self.adata_list[dataset_use]
-            obsm_values = adata.obsm[obsm_name]
-
-        return obsm_values
-
     def return_H(self, dataset_use='all'):
         H_list = []
         for adata in self.adata_list:
@@ -211,27 +189,21 @@ class Liger(object):
 
         return var_values
 
-    def get_gene_values(self, gene, data_use='raw', use_cols=False, methylation_indices=None, log2scale=False,
+    def get_gene_values(self, gene, use_cols=False, methylation_indices=None, log2scale=False,
                         scale_factor=10000):
         """"""
+
         if methylation_indices is None:
             methylation_indices = []
-        #gene_list = np.asarray([adata.var.index for adata in self.adata_list])
-        if data_use == 'raw':
-            data = self.get_data('raw')
-        elif data_use == 'norm':
-            data = self.get_data('norm_data')
-        else:
-            raise ValueError('invaild data_use input')
 
         gene_vals_total = []
-        for idx, mtx in enumerate(data):
+        for idx, adata in enumerate(self.adata_list):
             gene_names = self.adata_list[idx].var.index
             if gene in gene_names:
-                gene_idx = gene_names.get_loc(gene)
-                gene_vals = np.ravel(mtx[:, gene_idx].toarray())
+                gene_vals = np.ravel(adata[:, gene].layers['norm_data'].toarray())
             else:
-                gene_vals = np.zeros(mtx.shape[0], dtype=np.int)
+                gene_vals = np.zeros(adata.shape[0], dtype=np.int)
+
             if log2scale and idx not in methylation_indices:
                 gene_vals = np.log2(gene_vals * scale_factor + 1)
 
@@ -239,5 +211,37 @@ class Liger(object):
 
         return np.concatenate(gene_vals_total)
 
-    def check_status(self):
+    def save_obsm(self, obsm_value, obsm_name, dataset_use='all'):
+        if dataset_use == 'all':
+            dataset_use = list(range(self.num_samples))
+
+        idx = 0
+        for i in dataset_use:
+            self.adata_list[i].obsm[obsm_name] = obsm_value[idx:(idx+self.adata_list[i].shape[0])]
+            idx += self.adata_list[i].shape[0]
+
         return None
+
+    def get_obsm(self, obsm_name, dataset_use='all'):
+        """
+        """
+        if dataset_use == 'all':
+            dataset_use = list(range(self.num_samples))
+
+        obsm_values = []
+        for i in dataset_use:
+            obsm_values.append(self.adata_list[i].obsm[obsm_name])
+
+        return obsm_values
+
+
+    def save(self):
+        """
+
+        :return:
+        """
+        pass
+
+
+    def load(self):
+        pass

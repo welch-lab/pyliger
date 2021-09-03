@@ -71,7 +71,7 @@ def run_umap(liger_object,
             H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
             dims_use = list(range(H_norm.shape[1]))
 
-        tsne_coords = umap.UMAP(n_components=k, metric=distance,
+        umap_coords = umap.UMAP(n_components=k, metric=distance,
                                 n_neighbors=n_neighbors, min_dist=min_dist,
                                 random_state=rand_seed).fit_transform(raw_data[:, dims_use])
     else:
@@ -83,18 +83,14 @@ def run_umap(liger_object,
         #                        n_neighbors=n_neighbors, min_dist=min_dist,
         #                        random_state=rand_seed).fit(H_norm[dims_use, :])
         H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
-        tsne_coords = umap.UMAP(n_components=k, metric=distance,
+        umap_coords = umap.UMAP(n_components=k, metric=distance,
                                 n_neighbors=n_neighbors, min_dist=min_dist,
                                 random_state=rand_seed).fit_transform(H_norm)
 
-    ### Assign umap results
-    # tsne_coords = np.array(cluster).flatten()
-    # idx = 0
-    # for i in range(len(liger_object.adata_list)):
-    #    liger_object.adata_list[i].obs['cluster'] = cluster[idx:(idx+liger_object.adata_list[i].shape[0])]
-    #    idx = liger_object.adata_list[i].shape[0]
+    ### Save umap results
+    liger_object.save_obsm(umap_coords, 'umap_coords')
 
-    liger_object.tsne_coords = pd.DataFrame(tsne_coords, columns=['tsne1', 'tsne2'])
+    liger_object.tsne_coords = pd.DataFrame(umap_coords, columns=['tsne1', 'tsne2'])
     return None
 
 # Perform t-SNE dimensionality reduction

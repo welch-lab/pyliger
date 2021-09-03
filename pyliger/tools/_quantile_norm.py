@@ -2,21 +2,21 @@ import numpy as np
 from scipy import interpolate
 from scipy.stats.mstats import mquantiles
 
-from ._utilities import refine_clusts
+from pyliger.clustering._utilities import refine_clusts
 
     
 def quantile_norm(liger_object, 
-                  quantiles = 50, 
-                  ref_dataset = None, 
-                  min_cells = 20, 
-                  dims_use = None, 
-                  do_center = False, 
-                  max_sample = 1000, 
-                  num_trees = None, 
-                  refine_knn = True,
-                  knn_k = 20,
-                  use_ann = False,
-                  rand_seed = 1):
+                  quantiles=50,
+                  ref_dataset=None,
+                  min_cells=20,
+                  dims_use=None,
+                  do_center=False,
+                  max_sample=1000,
+                  num_trees=None,
+                  refine_knn=True,
+                  knn_k=20,
+                  use_ann=False,
+                  rand_seed=1):
     """Quantile align (normalize) factor loadings
     
     This process builds a shared factor neighborhood graph to jointly cluster cells, then quantile
@@ -83,10 +83,10 @@ def quantile_norm(liger_object,
     np.random.seed(rand_seed)
     
     num_samples = len(liger_object.adata_list)
-    
+
     # set reference dataset
     if ref_dataset is None:
-        ns = [adata.shape[1] for adata in liger_object.adata_list]
+        ns = [adata.shape[0] for adata in liger_object.adata_list]
         ref_dataset_idx = np.argmax(ns)
     else:
         for i in range(num_samples):
@@ -124,6 +124,7 @@ def quantile_norm(liger_object,
         
         # assign clusters to corresponding adata
         liger_object.adata_list[i].obs['cluster'] = clusts
+
     
     # all H_matrix used for quantile alignment
     Hs = [np.copy(adata.obsm['H']) for adata in liger_object.adata_list]
@@ -143,21 +144,20 @@ def quantile_norm(liger_object,
                     continue
                 
                 if num_cells2 == 1:
-                    Hs[k][cells2, i] = np.mean(Hs[ref_dataset_idx][cells1,i])
+                    Hs[k][cells2, i] = np.mean(Hs[ref_dataset_idx][cells1, i])
                     continue
                 
-                # maxiumn number of cells used for quantile normalization
+                # maximum number of cells used for quantile normalization
                 q2 = mquantiles(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)],
                                 np.linspace(0, 1, num=quantiles + 1), alphap=1, betap=1)
-                q1 = mquantiles(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0,1,num=quantiles+1),
+                q1 = mquantiles(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0, 1, num=quantiles+1),
                                 alphap=1, betap=1)
-
-                # handle ties (zeros) in order to get consistent results with LIGER
-                q1 = _mean_ties(q2, q1)
 
                 if np.sum(q1) == 0 or np.sum(q2) == 0 or len(np.unique(q1)) < 2 or len(np.unique(q2)) < 2:
                     new_vals = np.repeat(0, num_cells2) 
                 else:
+                    # handle ties (zeros) in order to get consistent results with LIGER
+                    q1 = _mean_ties(q2, q1)
                     warp_func = interpolate.interp1d(q2, q1)
                     new_vals = warp_func(Hs[k][cells2, i])
                 Hs[k][cells2, i] = new_vals
@@ -169,7 +169,7 @@ def quantile_norm(liger_object,
 
 
 def _mean_ties(x, y):
-    """helper function to calculate the mean value of y where ties zero occure in x"""
+    """helper function to calculate the mean value of y where ties(zeros) occur in x"""
     idx_zeros = x == 0
     if np.sum(idx_zeros) > 0:
         y[idx_zeros] = np.mean(y[idx_zeros])

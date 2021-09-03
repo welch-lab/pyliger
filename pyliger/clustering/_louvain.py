@@ -1,7 +1,7 @@
 import louvain
 import numpy as np
 
-from ._utilities import run_knn, compute_snn, build_igraph
+from ._utilities import run_knn, compute_snn, build_igraph, _assign_cluster
 
 
 def louvain_cluster(liger_object,
@@ -65,10 +65,6 @@ def louvain_cluster(liger_object,
             max_quality = part.quality()
 
     ### 4. Assign cluster results
-    cluster = np.array(cluster).flatten()
-    idx = 0
-    for i in range(len(liger_object.adata_list)):
-        liger_object.adata_list[i].obs['cluster'] = cluster[idx:(idx + liger_object.adata_list[i].shape[0])]
-        idx = liger_object.adata_list[i].shape[0]
+    _assign_cluster(cluster, liger_object)
 
     return None

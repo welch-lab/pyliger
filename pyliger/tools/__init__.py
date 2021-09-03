@@ -2,6 +2,7 @@ from ._metrics import calc_dataset_specificity
 from ._umap import run_umap
 from ._marker import get_factor_markers
 from ._wilcoxon import run_wilcoxon, _wilcoxon
+from ._quantile_norm import quantile_norm
 
 
 #######################################################################################
