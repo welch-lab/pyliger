@@ -12,7 +12,8 @@ def plot_by_dataset_and_cluster(liger_object,
                                 axis_labels=None,
                                 do_legend=True,
                                 legend_size=7,
-                                return_plots=False):
+                                return_plots=False,
+                                legend_text_size=12):
     """Plot t-SNE coordinates of cells across datasets
 
     Generates two plots of all cells across datasets, one colored by dataset and one colored by
@@ -54,7 +55,7 @@ def plot_by_dataset_and_cluster(liger_object,
     # tsne_coords = [adata.obs['tsne_coords'] for adata in liger_object.adata_list]
     tsne_df = liger_object.tsne_coords
     tsne_df['Cluster'] = np.asarray(
-        np.concatenate([adata.obs['cluster'].to_numpy() for adata in liger_object.adata_list]), dtype=np.int)
+        np.concatenate([adata.obs['cluster'].to_numpy() for adata in liger_object.adata_list]))
     tsne_df['Cluster'] = tsne_df['Cluster'].astype('category')
     tsne_df['Dataset'] = np.concatenate(
         [np.repeat(adata.uns['sample_name'], adata.shape[0]) for adata in liger_object.adata_list])
@@ -84,8 +85,8 @@ def plot_by_dataset_and_cluster(liger_object,
         p1 = p1 + xlab(axis_labels[0]) + ylab(axis_labels[1])
         p2 = p2 + xlab(axis_labels[0]) + ylab(axis_labels[1])
 
-    p1 = p1 + theme_classic(12)
-    p2 = p2 + theme_classic(12)
+    p1 = p1 + theme_classic(legend_text_size)
+    p2 = p2 + theme_classic(legend_text_size)
 
     if not do_legend:
         p1 = p1 + theme(legend_position='none')

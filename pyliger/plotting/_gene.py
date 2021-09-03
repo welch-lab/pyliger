@@ -2,14 +2,18 @@ import warnings
 import numpy as np
 import pandas as pd
 from plotnine import *
+from sklearn.preprocessing import scale
+from typing import Union, Optional, Tuple, Collection, Sequence, Iterable
+
+from ._utilities import get_gene_values
 
 
 def plot_gene(liger_object,
               gene,
-              use_raw=False,
-              use_scaled=False,
+              use_raw: bool = False,
+              use_scaled: bool = False,
               scale_by='dataset',
-              log2scale=None,
+              log2scale: Optional[bool] = None,
               methylation_indices=None,
               plot_by='dataset',
               set_dr_lims=False,
@@ -24,15 +28,20 @@ def plot_gene(liger_object,
               axis_labels=None,
               do_legend=True,
               return_plots=False,
-              keep_scale=False):
+              keep_scale=False,
+              legend_text_size=12):
     """Plot gene expression on dimensional reduction (t-SNE) coordinates
+
+    Generates plot of dimensional reduction coordinates (default t-SNE) colored by expression of
+    specified gene. Data can be scaled by dataset or selected feature column from cell_data (or across
+    all cells). Data plots can be split by feature.
 
     Parameters
     ----------
     liger_object : TYPE
-        DESCRIPTION.
-    gene : TYPE
-        DESCRIPTION.
+        Should call runTSNE before calling.
+    gene
+        Gene for which to plot expression.
     use_raw : TYPE, optional
         DESCRIPTION. The default is False.
     use_scaled : TYPE, optional
@@ -79,13 +88,13 @@ def plot_gene(liger_object,
     if plot_by != scale_by and use_scaled:
         warnings.warn('Provided values for plot_by and scale_by do not match; results may not be very interpretable.')
 
-        ### Extract Gene Values
+    ### 1. Extract Gene Values
     if use_raw:
         if log2scale is None:
             log2scale = False
 
         # drop only outer level names
-        gene_vals = liger_object.get_gene_values(gene, data_use='raw', log2scale=log2scale)
+        gene_vals = get_gene_values(gene, data_use='raw', log2scale=log2scale)
 
     else:
         if log2scale is None:
@@ -97,7 +106,7 @@ def plot_gene(liger_object,
             if scale_by is not None and scale_by not in ['nUMI', 'nGene', 'dataset']:
                 raise ValueError('Please select existing feature in cell_data to scale_by, or add it before calling.')
 
-            gene_vals = liger_object.get_gene_values(gene, data_use='norm', log2scale=log2scale)
+            gene_vals = get_gene_values(liger_object, gene, log2scale=log2scale)
 
             # set up dataframe with groups
             gene_df = pd.DataFrame({'gene': gene_vals}, dtype=np.float64)
@@ -114,22 +123,23 @@ def plot_gene(liger_object,
             if log2scale:
                 gene_vals = np.log2(10000 * gene_vals + 1)
 
-
         else:
             # using normalized data
             # indicate methylation indices here
-            gene_vals = liger_object.get_gene_values(gene, data_use='norm', methylation_indices=methylation_indices,
-                                                     log2scale=log2scale)
+            gene_vals = get_gene_values(liger_object, gene, methylation_indices=methylation_indices, log2scale=log2scale)
 
-    gene_vals[gene_vals == 0] = np.nan
+    if np.sum(gene_vals) != 0:
+        gene_vals[gene_vals == 0] = np.nan
 
+
+    ### 2. Build dataframe for plotting
     # extract min and max expression values for plot scaling if keep_scale = T
     if keep_scale:
         max_exp_val = np.nanmax(gene_vals)
         min_exp_val = np.nanmin(gene_vals)
 
-    # dr_df = pd.DataFrame(data=liger_object._get_obs('tsne_coords'), columns=['dr1', 'dr2'])
-    dr_df = liger_object.tsne_coords
+    umap_coords = np.concatenate(liger_object.get_obsm('umap_coords'))
+    dr_df = pd.DataFrame(umap_coords, columns=['tsne1', 'tsne2'])
     dr_df['gene'] = gene_vals
 
     # get dr limits for later
@@ -152,7 +162,7 @@ def plot_gene(liger_object,
         max_clip = dict(zip(liger_object.sample_names, np.repeat(np.nan, num_levels)))
 
     ###!!!    #if min_clip is not None and
-    ### Create plot for each dataset
+    ### 3. Create plot for each dataset
     p_list = {}
     for group_name, sub_df in dr_df.groupby('plot_by'):
         # maybe do quantile cutoff here
@@ -169,8 +179,8 @@ def plot_gene(liger_object,
             max_v = max_clip[group_name]
             min_v = min_clip[group_name]
 
-        sub_df['gene'][(sub_df['gene'] > max_v) & (sub_df['gene'].notna())] = max_v
-        sub_df['gene'][(sub_df['gene'] < min_v) & (sub_df['gene'].notna())] = min_v
+        sub_df.loc[(sub_df['gene'] > max_v) & (sub_df['gene'].notna()), 'gene'] = max_v
+        sub_df.loc[(sub_df['gene'] < min_v) & (sub_df['gene'].notna()), 'gene'] = min_v
 
         ggp = (ggplot(data=sub_df, mapping=aes(x='tsne1', y='tsne2', color='gene')) +
                geom_point(size=pt_size) +
@@ -212,7 +222,7 @@ def plot_gene(liger_object,
                               panel_border=element_blank(), panel_grid_major=element_blank(),
                               panel_grid_minor=element_blank(), plot_background=element_blank(),
                               plot_title=element_blank())
-        p_list[sub_df['plot_by'].iloc[0]] = ggp + theme_classic(12)
+        p_list[sub_df['plot_by'].iloc[0]] = ggp + theme_classic(legend_text_size)
 
     # if plot_by == 'dataset':
     #    p_list = p_list[]
@@ -222,4 +232,85 @@ def plot_gene(liger_object,
     else:
         for plot in p_list:
             plot.draw()
+        return None
+
+
+def plot_gene_dict(liger_object, gene_dict):
+    return None
+
+
+def plot_gene_spatial(liger_object,
+                      gene,
+                      use_raw: bool = False,
+                      use_scaled: bool = False,
+                      scale_by='dataset',
+                      log2scale: Optional[float] = None,
+                      methylation_indices=None,
+                      plot_by='dataset',
+                      set_dr_lims=False,
+                      pt_size=0.1,
+                      min_clip=None,
+                      max_clip=None,
+                      clip_absolute=False,
+                      points_only=False,
+                      option='plasma_r',
+                      cols_use=None,
+                      zero_color='#F5F5F5',
+                      axis_labels=None,
+                      do_legend=True,
+                      return_plots=False,
+                      keep_scale=False):
+    if plot_by != scale_by and use_scaled:
+        warnings.warn('Provided values for plot_by and scale_by do not match; results may not be very interpretable.')
+
+    ### 1. Extract Gene Values
+    if use_raw:
+        if log2scale is None:
+            log2scale = False
+
+        # drop only outer level names
+        gene_vals = get_gene_values(gene, data_use='raw', log2scale=log2scale)
+
+    else:
+        if log2scale is None:
+            log2scale = True
+
+        # rescale in case requested gene not highly variable
+        if use_scaled:
+            # check for feature
+            if scale_by is not None and scale_by not in ['nUMI', 'nGene', 'dataset']:
+                raise ValueError('Please select existing feature in cell_data to scale_by, or add it before calling.')
+
+            gene_vals = get_gene_values(liger_object, gene, log2scale=log2scale)
+
+            # set up dataframe with groups
+            gene_df = pd.DataFrame({'gene': gene_vals}, dtype=np.float64)
+
+            if scale_by is None:
+                gene_df['scale_by'] = np.repeat('none', gene_vals.shape[0])
+            else:
+                gene_df['scale_by'] = liger_object.get_obs(scale_by, return_values=True)
+
+            # scale by selected feature
+            gene_df1 = gene_df.groupby('scale_by')['gene'].transform(scale, with_mean=False)
+            gene_vals = gene_df1['gene']
+
+            if log2scale:
+                gene_vals = np.log2(10000 * gene_vals + 1)
+
+        else:
+            # using normalized data
+            # indicate methylation indices here
+            gene_vals = get_gene_values(liger_object, gene, methylation_indices=methylation_indices, log2scale=log2scale)
+
+    if np.sum(gene_vals) != 0:
+        gene_vals[gene_vals == 0] = np.nan
+
+    figs = []
+    for adata in liger_object.adata_list:
+        figs = _plot_spatial_adata(adata, image_key)
+
+    if return_plots:
+        return figs
+    else:
         return None
