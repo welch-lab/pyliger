@@ -2,6 +2,8 @@ import re
 import os
 import json
 import h5py
+import anndata
+import h5sparse
 import scipy.io
 import numpy as np
 import pandas as pd
@@ -10,6 +12,9 @@ from pathlib import Path
 from anndata import AnnData
 from matplotlib.image import imread
 from scipy.sparse import csr_matrix, csc_matrix
+from sklearn.preprocessing import normalize as sp_normalize
+
+from ._utilities import _h5_idx_generator
 
 
 def read_10X(sample_dirs,
@@ -200,7 +205,11 @@ def read_10X(sample_dirs,
 
 
 def read_10X_h5(sample_dir: str,
-                sample_name: str
+                sample_name: str,
+                file_name = None,
+                use_raw = False,
+                backed = False,
+                chunk_size = 1000
                 ) -> AnnData:
     """
     need to be improved a lot
@@ -208,9 +217,17 @@ def read_10X_h5(sample_dir: str,
     :param sample_name:
     :return:
     """
-    file_name = sample_dir + '/' + sample_name + '.h5'
+    ### 0. Parameter checking
+    if file_name is not None:
+        file_path = Path(sample_dir, file_name)
+    else:
+        if use_raw:
+            file_path = Path(sample_dir, 'raw_feature_bc_matrix.h5')
+        else:
+            file_path = Path(sample_dir, 'filtered_feature_bc_matrix.h5')
 
-    with h5py.File(file_name, 'r') as f:
+    ### 1. Read h5 file
+    with h5py.File(file_path, 'r') as f:
         raw_data = csc_matrix((f['matrix']['data'], f['matrix']['indices'], f['matrix']['indptr']),
                               shape=f['matrix']['shape'])
         features = pd.DataFrame({'gene_name': f['matrix']['features']['name'][()].astype(str)})
@@ -220,8 +237,28 @@ def read_10X_h5(sample_dir: str,
     barcodes = barcodes.set_index('barcodes')
     features = features.set_index('gene_name')
 
-    adata = AnnData(raw_data, obs=barcodes, var=features,
-                    uns={'sample_name': sample_name, 'data_type': 'Gene Expression'})
+    ### 2. Save AnnData or hdf5 if backed
+    if not backed:
+        adata = AnnData(raw_data, obs=barcodes, var=features,
+                        uns={'sample_name': sample_name, 'data_type': 'Gene Expression'})
+    else:
+        if not os.path.isdir('./results'):
+            os.mkdir('./results')
+
+        # create h5 file for each individual sample.
+        file_name = './results/' + sample_name + '.hdf5'
+        with h5sparse.File(file_name, 'w') as f:
+            for left, right in _h5_idx_generator(chunk_size, raw_data.shape[0]):
+                if 'raw_data' not in f.keys():
+                    f.create_dataset('raw_data', data=raw_data[left:right, :], chunks=(chunk_size,), maxshape=(None,))
+                else:
+                    f['raw_data'].append(raw_data[left:right, :])
+
+        adata = AnnData(raw_data, obs=barcodes, var=features,
+                        uns={'sample_name': sample_name, 'data_type': 'Gene Expression', 'backed_path': file_name})
+        adata.write_h5ad(filename='./results/' + sample_name + '.h5ad')
+        adata = anndata.read_h5ad(filename='./results/' + sample_name + '.h5ad', backed=True)
+
     adata.var_names_make_unique()
 
     return adata
@@ -271,12 +308,66 @@ def read_10X_visium(sample_dirs, sample_names):
     return adata
 
 
+def read_10X_multiome(sample_dir, sample_name):
+    """
+
+    :param sample_dir:
+    :param sample_name:
+    :return:
+    """
+    file_name = sample_dir + '/' + sample_name + '.h5'
+
+    with h5py.File(file_name, 'r') as f:
+        raw_data = csc_matrix((f['matrix']['data'], f['matrix']['indices'], f['matrix']['indptr']),
+                              shape=f['matrix']['shape'])
+        features = pd.DataFrame({'gene_name': f['matrix']['features']['name'][()].astype(str),
+                                 'id': f['matrix']['features']['id'][()].astype(str),
+                                 'feature_type': f['matrix']['features']['feature_type'][()].astype(str)
+                                 })
+        barcodes = pd.DataFrame({'barcodes': f['matrix']['barcodes'][()].astype(str)})
+
+    raw_data = csr_matrix(raw_data.transpose())
+    barcodes = barcodes.set_index('barcodes')
+    features = features.set_index('gene_name')
+
+    rna_idx = features['feature_type'] == 'Gene Expression'
+    adata_atac = AnnData(raw_data[:, ~rna_idx], obs=barcodes, var=features[~rna_idx],
+                         uns={'sample_name': sample_name, 'data_type': 'Gene Expression'})
+    adata_rna = AnnData(raw_data[:, rna_idx], obs=barcodes, var=features[rna_idx],
+                        uns={'sample_name': sample_name, 'data_type': 'Gene Expression'})
+    adata_atac.var_names_make_unique()
+    adata_rna.var_names_make_unique()
+
+    return adata_atac, adata_rna
+
+
+def read_10X_atac():
+    pass
+
 def save(dir, overwrite='None'):
     p = Path(dir)
     if p.exists():
         if overwrite is True:
             pass
     pass
+
+
+def save_cellxgene(liger_object,
+                   save_dir,
+                   return_adata=False):
+    """ """
+    concat_adata = anndata.concat(liger_object.adata_list)
+    cellxgene_adata = AnnData(csc_matrix(np.log2(sp_normalize(concat_adata.raw.X, axis=1, norm='l1').toarray() * 10000 + 1)),
+                              obs=concat_adata.obs, var=concat_adata.raw.var, uns=concat_adata.uns, obsm=concat_adata.obsm)
+
+    cellxgene_adata.obsm['X_umap'] = cellxgene_adata.obsm['umap_coords']
+    cellxgene_adata.obs['leiden'] = cellxgene_adata.obs['cluster'].astype("category")
+
+
+    if return_adata:
+        return cellxgene_adata
+    else:
+        return None
 
 
 def load(dir, backed='None'):
@@ -321,3 +412,7 @@ def _build_path(sample_dir, use_filtered, reference):
         features_file = str(np.where(is_v3, sample_dir + '/peaks.bed.gz', sample_dir + '/peaks.bed'))
 
     return sample_dir, suffix
+
+class Data:
+    def __init__(self, file_path, file_name):
+        pass

@@ -1,3 +1,6 @@
+import os
+import logging
+import h5sparse
 import numpy as np
 from anndata import AnnData
 from scipy.sparse import csr_matrix
@@ -53,7 +56,7 @@ def create_liger(adata_list: List,
 
     """
     # On-disk mode (set for online learning approach)
-    if adata_list[0].isbacked:
+    if adata_list[0].isbacked or 'backed_path' in adata_list[0].uns_keys():
         processed_list = []
         for adata in adata_list:
             processed_list.append(_initialization_online(adata, chunk_size, remove_missing))
@@ -75,17 +78,15 @@ def _initialization_online(adata, chunk_size, remove_missing):
     gene_sum_sq = np.zeros(adata.shape[1])
     nUMI = np.zeros(adata.shape[0])
     nGene = np.zeros(adata.shape[0])
-    for left, right in _h5_idx_generator(chunk_size, adata.shape[0]):
-        raw_data = adata.X[left:right, :]
-        gene_sum += np.ravel(np.sum(raw_data, axis=0))
-        gene_sum_sq += np.ravel(np.sum(raw_data.power(2), axis=0))
-        nUMI[left:right] = np.ravel(np.sum(raw_data, axis=1))
-        nGene[left:right] = raw_data.getnnz(axis=1)
 
-    import os
-    # create results folder if not exists
-    if not os.path.exists('results'):
-        os.makedirs('results')
+    file_path = './results/' + adata.uns['sample_name'] + '.hdf5'
+    with h5sparse.File(file_path, 'r') as f:
+        for left, right in _h5_idx_generator(chunk_size, adata.shape[0]):
+            raw_data = csr_matrix(f['raw_data'][left:right])
+            gene_sum += np.ravel(np.sum(raw_data, axis=0))
+            gene_sum_sq += np.ravel(np.sum(raw_data.power(2), axis=0))
+            nUMI[left:right] = np.ravel(np.sum(raw_data, axis=1))
+            nGene[left:right] = raw_data.getnnz(axis=1)
 
     # save AnnData
     file_path = './results/' + adata.uns['sample_name'] + '.h5ad'
@@ -93,13 +94,22 @@ def _initialization_online(adata, chunk_size, remove_missing):
         idx_missing = gene_sum == 0
     else:
         idx_missing = np.repeat(False, adata.shape[1])
-    processed_adata = adata[:, ~idx_missing].copy(file_path)
-    processed_adata.var['gene_sum'] = gene_sum[~idx_missing]
-    processed_adata.var['gene_sum_sq'] = gene_sum_sq[~idx_missing]
-    processed_adata.obs['nUMI'] = nUMI
-    processed_adata.obs['nGene'] = nGene
 
-    return processed_adata
+    if np.sum(idx_missing) > 0:
+        print('Removing {} genes not expressing in {}.'.format(np.sum(idx_missing), adata.uns['sample_name']))
+    #processed_adata = adata[:, ~idx_missing].copy(file_path)
+    #processed_adata.var['gene_sum'] = gene_sum[~idx_missing]
+    #processed_adata.var['gene_sum_sq'] = gene_sum_sq[~idx_missing]
+    #processed_adata.obs['nUMI'] = nUMI
+    #processed_adata.obs['nGene'] = nGene
+    adata = adata[:, ~idx_missing].copy(file_path)
+    adata.var['gene_sum'] = gene_sum[~idx_missing]
+    adata.var['gene_sum_sq'] = gene_sum_sq[~idx_missing]
+    adata.obs['nUMI'] = nUMI
+    adata.obs['nGene'] = nGene
+    adata.uns['idx_missing'] = idx_missing
+
+    return adata
 
 
 def _create_liger_matrix(adata_list, make_sparse, take_gene_union, remove_missing):
@@ -151,10 +161,12 @@ def _create_liger_matrix(adata_list, make_sparse, take_gene_union, remove_missin
 
     # Initialize cell_data for liger_object with nUMI, nGene, and dataset
     for idx, adata in enumerate(adata_list):
+        liger_object.adata_list[idx].var['gene_sum'] = np.ravel(np.sum(adata.X, axis=0))
+        liger_object.adata_list[idx].var['gene_sum_sq'] = np.ravel(np.sum(adata.X.power(2), axis=0))
+        liger_object.adata_list[idx].var['nCell'] = adata.X.getnnz(axis=0)
         liger_object.adata_list[idx].obs['nUMI'] = np.ravel(np.sum(adata.X, axis=1))
         liger_object.adata_list[idx].obs['nGene'] = adata.X.getnnz(axis=1)
-            #np.count_nonzero(adata.X.toarray(), axis=1)
-        liger_object.adata_list[idx].obs['dataset'] = np.repeat(adata.uns['sample_name'], adata.obs.index.shape[0])
+        liger_object.adata_list[idx].obs['dataset'] = np.repeat(adata.uns['sample_name'], adata.shape[0])
 
     return liger_object
 

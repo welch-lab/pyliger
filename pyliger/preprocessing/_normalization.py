@@ -66,14 +66,16 @@ def _normalize_online(adata, chunk_size):
 
     # create h5 file for each individual sample.
     file_path = './results/' + adata.uns['sample_name'] + '.hdf5'
-    with h5sparse.File(file_path, 'w') as f:
+    with h5sparse.File(file_path, 'r+') as f:
         for left, right in _h5_idx_generator(chunk_size, adata.shape[0]):
             # normalize data and store normalized data as sparse matrix in h5 file
-            norm_data = sp_normalize(adata.X[left:right, :], axis=1, norm='l1')
+            #norm_data = sp_normalize(adata.X[left:right, :], axis=1, norm='l1')
+            norm_data = sp_normalize(f['raw_data'][left:right][:, ~adata.uns['idx_missing']], axis=1, norm='l1')
             if 'norm_data' not in f.keys():
                 f.create_dataset('norm_data', data=norm_data, chunks=(chunk_size,), maxshape=(None,))
             else:
                 f['norm_data'].append(norm_data)
+
 
             # calculate row sum and sum of squares using normalized data
             norm_sum = norm_sum + np.ravel(np.sum(norm_data, axis=0))
