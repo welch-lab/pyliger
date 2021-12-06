@@ -3,7 +3,7 @@ from ._umap import run_umap
 from ._marker import get_factor_markers
 from ._wilcoxon import run_wilcoxon, _wilcoxon
 from ._quantile_norm import quantile_norm
-
+from ._go import run_GO_analysis
 
 #######################################################################################
 #### Conversion/Transformation TODO

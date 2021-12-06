@@ -1,7 +1,9 @@
+from ._qc import plot_qc
 from ._gene import plot_gene
 from ._gene_loadings import plot_gene_loadings
 from ._dataset_cluster import plot_by_dataset_and_cluster
 from ._spatial import plot_spatial
+from ._go import plot_go_term
 
 
 import numpy as np
