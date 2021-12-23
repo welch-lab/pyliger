@@ -150,6 +150,12 @@ def quantile_norm(liger_object,
                 # maximum number of cells used for quantile normalization
                 q2 = mquantiles(np.random.permutation(Hs[k][cells2, i])[0:min(num_cells2, max_sample)],
                                 np.linspace(0, 1, num=quantiles + 1), alphap=1, betap=1)
+                max_H = np.max(Hs[k][cells2, i])
+                min_H = np.min(Hs[k][cells2, i])
+                if q2[-1] < max_H:
+                    q2[-1] = max_H
+                if q2[0] > min_H:
+                    q2[0] = min_H
                 q1 = mquantiles(np.random.permutation(Hs[ref_dataset_idx][cells1, i])[0:min(num_cells1, max_sample)], np.linspace(0, 1, num=quantiles+1),
                                 alphap=1, betap=1)
 
