@@ -1,3 +1,6 @@
+import os
+import logging
+import h5sparse
 import numpy as np
 
 from anndata import AnnData
@@ -71,6 +74,7 @@ def _remove_missing_obs(adata,
     else:
         missing = np.ravel(np.sum(filter_data, axis=0)) == 0
     if np.sum(missing) > 0:
+        #logging.info('Removing {} {} not expressing{} in {}.'.format(np.sum(missing), removed, expressed, data_type))
         print('Removing {} {} not expressing{} in {}.'.format(np.sum(missing), removed, expressed, data_type))
         if use_rows:
             # show gene name when the total of missing is less than 25
@@ -90,7 +94,10 @@ def _remove_missing_obs(adata,
 def _h5_idx_generator(chunk_size, matrix_size):
     """ """
     previous_idx = 0
-    current_idx = chunk_size
+    if matrix_size < chunk_size:
+        current_idx = matrix_size
+    else:
+        current_idx = chunk_size
     num_chunk = np.ceil(matrix_size/chunk_size).astype(int)
     iter = 0
     while current_idx <= matrix_size and iter < num_chunk:
@@ -116,3 +123,18 @@ def nonneg(x, eps=1e-16):
     """ Given a input matrix, set all negative values to be zero """
     x[x < eps] = eps
     return x
+
+
+def _create_h5_using_adata(adata, chunk_size):
+    # create h5 file.
+    if not os.path.isdir('./results'):
+        os.mkdir('./results')
+
+    file_name = './results/' + adata.uns['sample_name'] + '.hdf5'
+    with h5sparse.File(file_name, 'w') as f:
+        for left, right in _h5_idx_generator(chunk_size, adata.shape[0]):
+            if 'raw_data' not in f.keys():
+                f.create_dataset('raw_data', data=adata[left:right, :].X, chunks=(chunk_size,), maxshape=(None,))
+            else:
+                f['raw_data'].append(adata[left:right, :].X)
+    return None

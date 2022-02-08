@@ -14,7 +14,7 @@ from matplotlib.image import imread
 from scipy.sparse import csr_matrix, csc_matrix
 from sklearn.preprocessing import normalize as sp_normalize
 
-from ._utilities import _h5_idx_generator
+from ._utilities import _h5_idx_generator, _create_h5_using_adata
 
 
 def read_10X(sample_dirs,
@@ -245,6 +245,7 @@ def read_10X_h5(sample_dir: str,
         if not os.path.isdir('./results'):
             os.mkdir('./results')
 
+        """
         # create h5 file for each individual sample.
         file_name = './results/' + sample_name + '.hdf5'
         with h5sparse.File(file_name, 'w') as f:
@@ -253,15 +254,18 @@ def read_10X_h5(sample_dir: str,
                     f.create_dataset('raw_data', data=raw_data[left:right, :], chunks=(chunk_size,), maxshape=(None,))
                 else:
                     f['raw_data'].append(raw_data[left:right, :])
-
+        """
         adata = AnnData(raw_data, obs=barcodes, var=features,
                         uns={'sample_name': sample_name, 'data_type': 'Gene Expression', 'backed_path': file_name})
+        _create_h5_using_adata(adata, chunk_size)
         adata.write_h5ad(filename='./results/' + sample_name + '.h5ad')
         adata = anndata.read_h5ad(filename='./results/' + sample_name + '.h5ad', backed=True)
 
     adata.var_names_make_unique()
 
     return adata
+
+
 
 
 def read_10X_visium(sample_dirs, sample_names):
@@ -368,6 +372,12 @@ def save_cellxgene(liger_object,
         return cellxgene_adata
     else:
         return None
+
+
+def write_h5(liger_object,
+             save_dir):
+    """helper function to save a copy of h5 file"""
+    pass
 
 
 def load(dir, backed='None'):
