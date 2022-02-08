@@ -1,3 +1,11 @@
+[![PyPI version](https://badge.fury.io/py/pyliger.svg)](https://badge.fury.io/py/pyliger)
+[![GitHub](https://img.shields.io/github/license/welch-lab/pyliger)](https://github.com/welch-lab/pyliger/blob/master/LICENSE)
+ <br/>
+
+  |Host | Downloads |
+  |-----|-----------|
+  |PyPI |[![Downloads](https://pepy.tech/badge/pyliger)](https://pepy.tech/project/pyliger)|
+
 # pyliger: Scalable single-cell multi-omic integration in python
 
 Installation instructions: `pip install pyliger`
