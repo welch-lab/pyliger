@@ -26,5 +26,11 @@ setup(name='pyliger',
               'colorcet',
               'scikit-learn',
               'h5sparse'
+              'numexpr',
+              'seaborn',
+              'plotnine',
+              'mygene',
+              'goatools',
+              'adjustText'
               ],
       zip_safe=False)
