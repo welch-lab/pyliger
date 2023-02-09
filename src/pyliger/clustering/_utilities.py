@@ -1,6 +1,5 @@
 import numpy as np
 import igraph as ig
-from numba import njit
 from annoy import AnnoyIndex
 from pynndescent import NNDescent
 from scipy.sparse import csr_matrix
