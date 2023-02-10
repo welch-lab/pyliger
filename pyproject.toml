@@ -1,71 +1,65 @@
 [build-system]
 build-backend = "pdm.pep517.api"
-requires      = ["pdm-pep517>=1.0.0"]
+requires = [
+    "pdm-pep517>=1.0.0",
+]
 
 [tool.black]
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.nox
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
-include = '\.pyi?$'
+exclude = "/(\n    \\.eggs\n  | \\.git\n  | \\.hg\n  | \\.mypy_cache\n  | \\.nox\n  | \\.tox\n  | \\.venv\n  | _build\n  | buck-out\n  | build\n  | dist\n)/\n"
+include = "\\.pyi?$"
 
 [tool.pdm]
 package-dir = "src"
 
 [project]
 authors = [
-  { name = "Joshua Welch", email = "welchjd@med.umich.edu" },
-  { name = "Lu Lu", email = "luluhz@umich.edu" },
+    { name = "Joshua Welch", email = "welchjd@med.umich.edu" },
+    { name = "Lu Lu", email = "luluhz@umich.edu" },
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "License :: OSI Approved :: MIT License",
-  "Natural Language :: English",
-  "Operating System :: OS Independent",
-  "Programming Language :: Python :: 3.8",
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.8",
 ]
 dependencies = [
-  "adjustText>=0.7.3",
-  "anndata>=0.8.0",
-  "annoy",
-  "bokeh",
-  "colorcet",
-  "goatools>=1.3.1",
-  "h5sparse>=0.1.0",
-  "holoviews",
-  "leidenalg",
-  "louvain",
-  "matplotlib>=3.6.3",
-  "mygene",
-  "numexpr>=2.8.4",
-  "numpy",
-  "pandas",
-  "plotnine>=0.10.1",
-  "python-igraph",
-  "scikit-learn",
-  "seaborn>=0.12.2",
-  "umap-learn",
+    "adjustText>=0.7.3",
+    "anndata>=0.8.0",
+    "annoy",
+    "bokeh",
+    "colorcet",
+    "goatools>=1.3.1",
+    "h5sparse>=0.1.0",
+    "holoviews",
+    "leidenalg",
+    "louvain",
+    "matplotlib>=3.6.3",
+    "mygene",
+    "numexpr>=2.8.4",
+    "numpy",
+    "pandas",
+    "plotnine>=0.10.1",
+    "python-igraph",
+    "scikit-learn",
+    "seaborn>=0.12.2",
+    "umap-learn",
 ]
 description = "The Python version of LIGER package."
-keywords = ["LIGER"]
-license = { text = "MIT" }
-maintainers = [{ name = "Andrew Robbins", email = "robbiand@med.umich.edu" }]
+keywords = [
+    "LIGER",
+]
+maintainers = [
+    { name = "Andrew Robbins", email = "robbiand@med.umich.edu" },
+]
 name = "pyliger"
 readme = "README.md"
 requires-python = "<3.11, >=3.8"
-version = "0.1"
+version = "0.1.1"
 
-  [project.urls]
-  homepage   = "https://welch-lab.github.io"
-  repository = "https://github.com/welch-lab/pyliger"
+[project.license]
+text = "MIT"
+
+[project.urls]
+homepage = "https://welch-lab.github.io"
+repository = "https://github.com/welch-lab/pyliger"
