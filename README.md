@@ -1,4 +1,4 @@
-[![PyPI version](https://badge.fury.io/py/pyliger.svg)](https://badge.fury.io/py/pyliger)
+[![PyPI version](https://img.shields.io/pypi/v/pyliger)](https://img.shields.io/pypi/v/pyliger)
 [![GitHub](https://img.shields.io/github/license/welch-lab/pyliger)](https://github.com/welch-lab/pyliger/blob/master/LICENSE)
  <br/>
 
