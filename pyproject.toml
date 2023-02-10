@@ -3,27 +3,15 @@
   requires      = ["pdm-pep517>=1.0.0"]
 
 [tool.black]
-  exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.nox
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
-  include = '\.pyi?$'
+  exclude = "/(\n    \\.eggs\n  | \\.git\n  | \\.hg\n  | \\.mypy_cache\n  | \\.nox\n  | \\.tox\n  | \\.venv\n  | _build\n  | buck-out\n  | build\n  | dist\n)/\n"
+  include = "\\.pyi?$"
 
 [tool.pdm]
   allow_prereleases = true
+
   [tool.pdm.build]
     package-dir = "src"
+
 [project]
   authors = [
     { name = "Joshua Welch", email = "welchjd@med.umich.edu" },
@@ -47,13 +35,13 @@
     "h5sparse",
     "holoviews",
     "leidenalg",
-    "llvmlite @ file:///${PROJECT_ROOT}/wheels/llvmlite-0.40.0.dev0-cp311-cp311-win_amd64.whl ; sys_platform == 'win32'",
     "llvmlite @ file:///${PROJECT_ROOT}/wheels/llvmlite-0.40.0.dev0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl ; sys_platform == 'linux'",
+    "llvmlite @ file:///${PROJECT_ROOT}/wheels/llvmlite-0.40.0.dev0-cp311-cp311-win_amd64.whl ; sys_platform == 'win32'",
     "louvain",
     "matplotlib",
     "mygene",
-    "numba @ file:///${PROJECT_ROOT}/wheels/numba-0.57.0.dev0-cp311-cp311-win_amd64.whl  ; sys_platform == 'win32'",
     "numba @ file:///${PROJECT_ROOT}/wheels/numba-0.57.0.dev0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl  ; sys_platform == 'linux'",
+    "numba @ file:///${PROJECT_ROOT}/wheels/numba-0.57.0.dev0-cp311-cp311-win_amd64.whl  ; sys_platform == 'win32'",
     "numexpr",
     "numpy<1.24",
     "pandas",
@@ -66,12 +54,15 @@
   ]
   description = "The Python version of LIGER package."
   keywords = ["LIGER"]
-  license = { text = "MIT" }
   maintainers = [{ name = "Andrew Robbins", email = "robbiand@med.umich.edu" }]
   name = "pyliger"
   readme = "README.md"
   requires-python = ">=3.11"
-  version = "0.1"
+  version = "0.2.0a1"
+
+  [project.license]
+    text = "MIT"
+
   [project.urls]
     homepage   = "https://welch-lab.github.io"
     repository = "https://github.com/welch-lab/pyliger"
