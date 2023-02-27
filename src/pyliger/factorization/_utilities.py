@@ -2,6 +2,7 @@ import numpy as np
 import scipy.sparse as sps
 import numpy.linalg as nla
 import scipy.linalg as sla
+from numba import jit, njit, prange
 from .._utilities import _h5_idx_generator
 
 
@@ -129,7 +130,7 @@ def _update_H_HALS(H, V, W, X, value_lambda):
 """
 #@jit(nopython=True)
 def _update_W_HALS(A, B, W, V):
-
+    
     for j in range(W.shape[1]):
         W_update_numerator = np.zeros(W.shape[0])
         W_update_denominator = 0.0
