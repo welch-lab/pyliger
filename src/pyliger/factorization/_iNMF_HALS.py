@@ -1,5 +1,6 @@
 import time
 import numpy as np
+from numba.typed import List
 
 from ._utilities import _init_W, _init_H, _init_V, _update_H_HALS, _update_W_HALS, _update_V_HALS
 
