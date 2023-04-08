@@ -9,13 +9,14 @@ exclude = "/(\n    \\.eggs\n  | \\.git\n  | \\.hg\n  | \\.mypy_cache\n  | \\.nox
 include = "\\.pyi?$"
 
 [tool.pdm]
-package-dir = "src"
+  allow_prereleases = true
 
 [tool.pdm.build]
 excludes = [
     "contrib",
 ]
 
+    package-dir = "src"
 [project]
 authors = [
     { name = "Joshua Welch", email = "welchjd@med.umich.edu" },
@@ -28,28 +29,30 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.8",
 ]
-dependencies = [
-    "adjustText>=0.7.3",
-    "anndata>=0.8.0",
+  dependencies = [
+    "adjustText",
+    "anndata",
     "annoy",
     "bokeh",
     "colorcet",
-    "goatools>=1.3.1",
-    "h5sparse>=0.1.0",
+    "datashader",
+    "goatools",
+    "h5sparse",
     "holoviews",
     "leidenalg",
     "louvain",
-    "matplotlib>=3.6.3",
+    "matplotlib",
     "mygene",
-    "numexpr>=2.8.4",
+    "numexpr",
     "numpy",
     "pandas",
-    "plotnine>=0.10.1",
+    "plotnine",
     "python-igraph",
     "scikit-learn",
-    "seaborn>=0.12.2",
+    "scipy",
+    "seaborn",
     "umap-learn",
-]
+  ]
 description = "The Python version of LIGER package."
 keywords = [
     "LIGER",
