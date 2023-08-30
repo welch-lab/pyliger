@@ -100,7 +100,7 @@ def refine_clusts(H, clusts, k, use_ann, num_trees=None):
 def compute_snn(knn, prune):
     """helper function to compute the SNN graph"""
     # int for indexing
-    knn = knn.astype(np.int)
+    knn = knn.astype(int)
 
     k = knn.shape[1]
     num_cells = knn.shape[0]

@@ -122,7 +122,7 @@ def _create_liger_matrix(adata_list, make_sparse, take_gene_union, remove_missin
     if make_sparse:
         for idx, adata in enumerate(adata_list):
             # force raw data to be csr matrix
-            adata_list[idx].X = csr_matrix(adata_list[idx].X, dtype=np.int)
+            adata_list[idx].X = csr_matrix(adata_list[idx].X, dtype=int)
             # check if dimnames exist
             if not adata.obs.index.name or not adata.var.index.name:
                 raise ValueError('Raw data must have both row (cell) and column (gene) names.')

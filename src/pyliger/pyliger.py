@@ -10,54 +10,54 @@ The pyliger main class
 """
 class Liger(object):
     """Main LIGER class
-    
+
     The liger object is created from two or more single cell datasets. To construct a
     liger object, the user needs to provide at least two expression (or another
     single-cell modality) matrices. The class serves as a container for results generated
     from  data preprocessing, integrative analysis, and visualization.
-        
+
     Attributes:
         adata_list(list):
             List of AnnData objects, one per experiment/dataset (cells by genes)
             In each AnnData objects, main matrix stores raw data and two addtional
             layers store normalized and scaled data with keys 'norm_data' and
             'scale_data' respectively.
-            H(matrix): 
+            H(matrix):
             Cell loading factors (one matrix per dataset, dimensions cells by k)
-            W(matrix): 
+            W(matrix):
             Shared gene loading factors (k by genes)
-            V(matrix): 
+            V(matrix):
             Dataset-specific gene loading factors (one matrix per dataset, dimensions k by genes)
-        cell_data(pd dataframe): 
+        cell_data(pd dataframe):
             Dataframe of cell attributes across all datasets (nrows equal to total number
             cells across all datasets)
-        var_genes(list): 
+        var_genes(list):
             Subset of informative genes shared across datasets to be used in matrix
             factorization
-        H_norm(pd dataframe): 
+        H_norm(pd dataframe):
             Normalized cell loading factors (cells across all datasets combined into single
             matrix)
-        clusters(pd dataframe): 
+        clusters(pd dataframe):
             Joint cluster assignments for cells
-        tsne_coords(): 
+        tsne_coords():
             Matrix of 2D coordinates obtained from running t-SNE on H_norm or H matrices
-        alignment_clusters(): 
+        alignment_clusters():
             Initial joint cluster assignments from shared factor alignment
-        snf(list): 
+        snf(list):
             List of values associated with shared nearest factor matrix for use in clustering and
             alignment (out_summary contains edge weight information between cell combinations)
-        agg_data(list): 
+        agg_data(list):
             Data aggregated within clusters
-        parameters(list): 
+        parameters(list):
             List of parameters used throughout analysis
-        version(): 
+        version():
             Version of package used to create object
     """
-    
+
     __slots__ = ('adata_list', 'cell_data', 'var_genes', 'tsne_coords',
                  'alignment_clusters', 'agg_data', 'parameters',
                  'snf', 'version')
-    
+
     def __init__(self, adata_list=[]):
         self.adata_list = adata_list
 
@@ -143,7 +143,7 @@ class Liger(object):
 
     def get_obs(self, obs_name, return_values=False):
         obs_values = pd.concat([adata.obs[obs_name] for adata in self.adata_list])
-        
+
         if return_values:
             return obs_values.values
         else:
@@ -202,7 +202,7 @@ class Liger(object):
             if gene in gene_names:
                 gene_vals = np.ravel(adata[:, gene].layers['norm_data'].toarray())
             else:
-                gene_vals = np.zeros(adata.shape[0], dtype=np.int)
+                gene_vals = np.zeros(adata.shape[0], dtype=int)
 
             if log2scale and idx not in methylation_indices:
                 gene_vals = np.log2(gene_vals * scale_factor + 1)
