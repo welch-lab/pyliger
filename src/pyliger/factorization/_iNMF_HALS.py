@@ -1,16 +1,20 @@
 import time
+
 import numpy as np
-from numba.typed import List
 
-from ._utilities import _init_W, _init_H, _init_V, _update_H_HALS, _update_W_HALS, _update_V_HALS
+from ._utilities import (
+    _init_H,
+    _init_V,
+    _init_W,
+    _update_H_HALS,
+    _update_V_HALS,
+    _update_W_HALS,
+)
 
-def iNMF_HALS(liger_object,
-              k=20,
-              value_lambda=5.0,
-              thresh=1e-4,
-              max_iters=25,
-              nrep=1,
-              rand_seed=1):
+
+def iNMF_HALS(
+    liger_object, k=20, value_lambda=5.0, thresh=1e-4, max_iters=25, nrep=1, rand_seed=1
+):
     """Perform iNMF on scaled datasets using HALS method
 
     Parameters
@@ -55,7 +59,7 @@ def iNMF_HALS(liger_object,
     """
 
     num_samples = len(liger_object.adata_list)
-    X = [adata.layers['scale_data'].transpose() for adata in liger_object.adata_list]
+    X = [adata.layers["scale_data"].transpose() for adata in liger_object.adata_list]
 
     num_cells = [X[i].shape[1] for i in range(num_samples)]
     num_genes = X[0].shape[0]
@@ -75,13 +79,15 @@ def iNMF_HALS(liger_object,
         obj_train_approximation = 0
         obj_train_penalty = 0
         for i in range(num_samples):
-            obj_train_approximation += np.linalg.norm(X[i].toarray() - (W + V[i]) @ H[i]) ** 2
+            obj_train_approximation += (
+                np.linalg.norm(X[i].toarray() - (W + V[i]) @ H[i]) ** 2
+            )
             obj_train_penalty += np.linalg.norm(V[i] @ H[i]) ** 2
 
         obj_train = obj_train_approximation + value_lambda * obj_train_penalty
 
         # print start information
-        print('Initial Training Obj: {}'.format(obj_train))
+        print("Initial Training Obj: {}".format(obj_train))
 
         iteration = 1
         total_time = 0  # track the total amount of time used for learning
@@ -89,15 +95,14 @@ def iNMF_HALS(liger_object,
 
         # Perform block coordinate descent
         while delta > thresh and iteration <= max_iters:
-
             iter_start_time = time.time()
 
             # update H matrix
             H = _update_H_HALS(H, V, W, X, value_lambda)
-            #VitVi = [V[i].transpose() @ V[i] for i in range(num_samples)]
-            #W_Vi = [W + V[i] for i in range(num_samples)]
-            #W_Vi_sq = [W_Vi[i].transpose() @ W_Vi[i] for i in range(num_samples)]
-            #for i in range(num_samples):
+            # VitVi = [V[i].transpose() @ V[i] for i in range(num_samples)]
+            # W_Vi = [W + V[i] for i in range(num_samples)]
+            # W_Vi_sq = [W_Vi[i].transpose() @ W_Vi[i] for i in range(num_samples)]
+            # for i in range(num_samples):
             #    for j in range(k):
             #        H[i][j, :] = nonneg(H[i][j, :] + (
             #                    W_Vi[i][:, j].transpose() @ X[i] - W_Vi[i][:, j].transpose() @ W_Vi[i] @ H[
@@ -107,12 +112,12 @@ def iNMF_HALS(liger_object,
             # update W matrix
             XHt = [X[i] @ H[i].transpose() for i in range(num_samples)]
             HHt = [H[i] @ H[i].transpose() for i in range(num_samples)]
-            #A = List()
-            #[A.append(x) for x in HHt]
-            #B = List()
-            #[B.append(x) for x in XHt]
-            #temp_V = List()
-            #[temp_V.append(x) for x in V]
+            # A = List()
+            # [A.append(x) for x in HHt]
+            # B = List()
+            # [B.append(x) for x in XHt]
+            # temp_V = List()
+            # [temp_V.append(x) for x in V]
             W = _update_W_HALS(HHt, XHt, W, V)
 
             # update V matrix
@@ -126,11 +131,17 @@ def iNMF_HALS(liger_object,
                 obj_train_approximation += np.linalg.norm(X[i] - (W + V[i]) @ H[i]) ** 2
                 obj_train_penalty += np.linalg.norm(V[i] @ H[i]) ** 2
             obj_train = obj_train_approximation + value_lambda * obj_train_penalty
-            delta = np.absolute(obj_train_prev - obj_train) / ((obj_train_prev + obj_train) / 2)
+            delta = np.absolute(obj_train_prev - obj_train) / (
+                (obj_train_prev + obj_train) / 2
+            )
 
             # print result information
-            total_time += (time.time() - iter_start_time)
-            print('Iter: {}, Total time: {}, Training Obj: {}'.format(iteration, total_time, obj_train))
+            total_time += time.time() - iter_start_time
+            print(
+                "Iter: {}, Total time: {}, Training Obj: {}".format(
+                    iteration, total_time, obj_train
+                )
+            )
 
             if obj_train <= obj_train_prev:
                 final_H = H
@@ -144,8 +155,8 @@ def iNMF_HALS(liger_object,
     liger_object.W = final_W
     # Save results into the liger_object
     for i in range(num_samples):
-        liger_object.adata_list[i].obsm['H'] = final_H[i].transpose()
-        liger_object.adata_list[i].varm['W'] = final_W
-        liger_object.adata_list[i].varm['V'] = final_V[i]
+        liger_object.adata_list[i].obsm["H"] = final_H[i].transpose()
+        liger_object.adata_list[i].varm["W"] = final_W
+        liger_object.adata_list[i].varm["V"] = final_V[i]
 
     return None

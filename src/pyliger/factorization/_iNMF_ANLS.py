@@ -1,20 +1,23 @@
 import numpy as np
-
 from tqdm import tqdm
+
 from ._utilities import nnlsm_blockpivot
 
-def optimize_ALS(liger_object,
-                 k,
-                 value_lambda=5.0,
-                 thresh=1e-6,
-                 max_iters=30,
-                 nrep=1,
-                 H_init=None,
-                 W_init=None,
-                 V_init=None,
-                 rand_seed=1,
-                 print_obj=False):
-    """ Perform iNMF on scaled datasets
+
+def optimize_ALS(
+    liger_object,
+    k,
+    value_lambda=5.0,
+    thresh=1e-6,
+    max_iters=30,
+    nrep=1,
+    H_init=None,
+    W_init=None,
+    V_init=None,
+    rand_seed=1,
+    print_obj=False,
+):
+    """Perform iNMF on scaled datasets
 
     Perform integrative non-negative matrix factorization to return factorized H, W, and V matrices.
     It optimizes the iNMF objective function using block coordinate descent (alternating non-negative
@@ -73,15 +76,25 @@ def optimize_ALS(liger_object,
     ### 0. Extract required information
     # prepare basic dataset profiles
     N = liger_object.num_samples  # number of total input hdf5 files
-    ns = [adata.shape[0] for adata in liger_object.adata_list]  # number of cells in each hdf5 files
+    ns = [
+        adata.shape[0] for adata in liger_object.adata_list
+    ]  # number of cells in each hdf5 files
     num_genes = len(liger_object.var_genes)  # number of variable genes
-    X = [adata.layers['scale_data'].toarray() for adata in liger_object.adata_list]
+    X = [adata.layers["scale_data"].toarray() for adata in liger_object.adata_list]
 
     if k >= np.min(ns):
-        raise ValueError('Select k lower than the number of cells in smallest dataset: {}'.format(np.min(ns)))
+        raise ValueError(
+            "Select k lower than the number of cells in smallest dataset: {}".format(
+                np.min(ns)
+            )
+        )
 
     if k >= num_genes:
-        raise ValueError('Select k lower than the number of variable genes: {}'.format(len(liger_object.var_genes)))
+        raise ValueError(
+            "Select k lower than the number of variable genes: {}".format(
+                len(liger_object.var_genes)
+            )
+        )
 
     best_obj = np.Inf
 
@@ -119,25 +132,36 @@ def optimize_ALS(liger_object,
             if delta > thresh:
                 ## 1) update H matrix
                 for i in range(N):
-                    H[i] = nnlsm_blockpivot(A=np.hstack(((W + V[i]), sqrt_lambda * V[i])).transpose(),
-                                            B=np.hstack((X[i], np.zeros((ns[i], num_genes)))).transpose())[0].transpose()
+                    H[i] = nnlsm_blockpivot(
+                        A=np.hstack(((W + V[i]), sqrt_lambda * V[i])).transpose(),
+                        B=np.hstack((X[i], np.zeros((ns[i], num_genes)))).transpose(),
+                    )[0].transpose()
 
                 ## 2) update V matrix
                 for i in range(N):
-                    V[i] = nnlsm_blockpivot(A=np.vstack((H[i], sqrt_lambda * H[i])),
-                                            B=np.vstack(((X[i] - H[i] @ W), np.zeros((ns[i], num_genes)))))[0]
+                    V[i] = nnlsm_blockpivot(
+                        A=np.vstack((H[i], sqrt_lambda * H[i])),
+                        B=np.vstack(((X[i] - H[i] @ W), np.zeros((ns[i], num_genes)))),
+                    )[0]
 
                 ## 3) update W matrix
-                W = nnlsm_blockpivot(A=np.vstack(H), B=np.vstack([(X[i] - H[i] @ V[i]) for i in range(N)]))[0]
+                W = nnlsm_blockpivot(
+                    A=np.vstack(H),
+                    B=np.vstack([(X[i] - H[i] @ V[i]) for i in range(N)]),
+                )[0]
 
                 obj_train_prev = obj0
                 obj_train_approximation = 0
                 obj_train_penalty = 0
                 for i in range(N):
-                    obj_train_approximation += np.linalg.norm(X[i] - H[i] @ (W + V[i])) ** 2
+                    obj_train_approximation += (
+                        np.linalg.norm(X[i] - H[i] @ (W + V[i])) ** 2
+                    )
                     obj_train_penalty += np.linalg.norm(H[i] @ V[i]) ** 2
                 obj0 = obj_train_approximation + value_lambda * obj_train_penalty
-                delta = np.absolute(obj_train_prev - obj0) / ((obj_train_prev + obj0) / 2)
+                delta = np.absolute(obj_train_prev - obj0) / (
+                    (obj_train_prev + obj0) / 2
+                )
             else:
                 continue
 
@@ -149,23 +173,23 @@ def optimize_ALS(liger_object,
             best_seed = rand_seed + i - 1
 
         if print_obj:
-            print('Objective: {}'.format(best_obj))
+            print("Objective: {}".format(best_obj))
 
-    #liger_object.W = final_W.transpose()
+    # liger_object.W = final_W.transpose()
 
     ### 3. Save results into the liger_object
     for i in range(N):
-        liger_object.adata_list[i].obsm['H'] = final_H[i]
-        liger_object.adata_list[i].varm['W'] = final_W.transpose()
-        liger_object.adata_list[i].varm['V'] = final_V[i].transpose()
-        #idx = liger_object.adata_list[i].uns['var_gene_idx']
-        #shape = liger_object.adata_list[i].shape
-        #save_W = np.zeros((shape[1], k))
-        #save_W[idx, :] = final_W.transpose()
-        #save_V = np.zeros((shape[1], k))
-        #save_V[idx, :] = final_V[i].transpose()
-        #liger_object.adata_list[i].obsm['H'] = final_H[i]
-        #liger_object.adata_list[i].varm['W'] = save_W
-        #liger_object.adata_list[i].varm['V'] = save_V
+        liger_object.adata_list[i].obsm["H"] = final_H[i]
+        liger_object.adata_list[i].varm["W"] = final_W.transpose()
+        liger_object.adata_list[i].varm["V"] = final_V[i].transpose()
+        # idx = liger_object.adata_list[i].uns['var_gene_idx']
+        # shape = liger_object.adata_list[i].shape
+        # save_W = np.zeros((shape[1], k))
+        # save_W[idx, :] = final_W.transpose()
+        # save_V = np.zeros((shape[1], k))
+        # save_V[idx, :] = final_V[i].transpose()
+        # liger_object.adata_list[i].obsm['H'] = final_H[i]
+        # liger_object.adata_list[i].varm['W'] = save_W
+        # liger_object.adata_list[i].varm['V'] = save_V
 
     return None

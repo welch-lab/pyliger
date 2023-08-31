@@ -1,8 +1,7 @@
 import numpy as np
 
 
-
-def calc_dataset_specificity(liger_object, dataset1 = None, dataset2 = None, do_plot = True):
+def calc_dataset_specificity(liger_object, dataset1=None, dataset2=None, do_plot=True):
     """Calculate a dataset-specificity score for each factor
 
     This score represents the relative magnitude of the dataset-specific components of each factor's
@@ -31,32 +30,53 @@ def calc_dataset_specificity(liger_object, dataset1 = None, dataset2 = None, do_
     pct1 = np.linalg.norm((V1 + W), axis=0)
     pct2 = np.linalg.norm((V2 + W), axis=0)
 
-#    if do_plot:
+    #    if do_plot:
 
-    return [pct1, pct2, 100*(1-(pct1/pct2))]
+    return [pct1, pct2, 100 * (1 - (pct1 / pct2))]
+
 
 # Calculate agreement metric
-def calcAgreement(liger_object, dr_method = "NMF", ndims = 40, k = 15, use_aligned = True,
-                  rand_seed = 42, by_dataset = False):
+def calcAgreement(
+    liger_object,
+    dr_method="NMF",
+    ndims=40,
+    k=15,
+    use_aligned=True,
+    rand_seed=42,
+    by_dataset=False,
+):
     pass
+
 
 # Calculate alignment metric
-def calcAlignment(liger_object, k = None, rand_seed = 1, cells_use = None, cells_comp = None,
-                  clusters_use = None, by_cell = False, by_dataset = False):
+def calcAlignment(
+    liger_object,
+    k=None,
+    rand_seed=1,
+    cells_use=None,
+    cells_comp=None,
+    clusters_use=None,
+    by_cell=False,
+    by_dataset=False,
+):
     pass
 
+
 # Calculate alignment for each cluster
-def calcAlignmentPerCluster(liger_object, rand_seed = 1, k = None, by_dataset = False):
+def calcAlignmentPerCluster(liger_object, rand_seed=1, k=None, by_dataset=False):
     pass
+
 
 # Calculate adjusted Rand index
 def calcARI(liger_object, clusters_compare):
     pass
 
+
 # Calculate purity
 def calcPurity(liger_object, classes_compare):
     pass
 
+
 # Calculate proportion mitochondrial contribution
-def getProportionMito(liger_object, use_norm = False):
+def getProportionMito(liger_object, use_norm=False):
     pass

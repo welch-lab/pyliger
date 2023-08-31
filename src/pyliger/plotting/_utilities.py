@@ -1,8 +1,9 @@
 import numpy as np
 
 
-def get_gene_values(liger_object, gene, methylation_indices=None, log2scale=False,
-                    scale_factor=10000):
+def get_gene_values(
+    liger_object, gene, methylation_indices=None, log2scale=False, scale_factor=10000
+):
     """"""
 
     if methylation_indices is None:
@@ -24,14 +25,14 @@ def get_gene_values(liger_object, gene, methylation_indices=None, log2scale=Fals
 
 
 def _get_gene_values_memory(adata, gene):
-
     # if gene is highly variable gene
     if gene in adata.var.index:
-        gene_vals = np.ravel(adata[:, gene].layers['norm_data'].toarray())
+        gene_vals = np.ravel(adata[:, gene].layers["norm_data"].toarray())
 
     # recover gene value from raw backup
     elif gene in adata.raw.var.index:
         from sklearn.preprocessing import normalize as sp_normalize
+
         normalized_data = sp_normalize(adata.raw.X)
         idx = adata.raw.var.index.get_loc(gene)
         gene_vals = np.ravel(normalized_data[:, idx].toarray())

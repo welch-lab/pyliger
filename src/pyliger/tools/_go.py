@@ -1,22 +1,17 @@
-import os
-import mygene
-import numpy as np
-
 from pathlib import Path
-#from __future__ import print_function
 
-from goatools.base import download_go_basic_obo, download_ncbi_associations
-from goatools.obo_parser import GODag
+import mygene
 from goatools.anno.genetogo_reader import Gene2GoReader
+from goatools.base import download_go_basic_obo, download_ncbi_associations
 from goatools.goea.go_enrichment_ns import GOEnrichmentStudyNS
+from goatools.obo_parser import GODag
+
+# from __future__ import print_function
 
 
-def run_GO_analysis(gene_list,
-                    background,
-                    data_source,
-                    result_path= None,
-                    alpha=0.05,
-                    methods=['fdr_bh']):
+def run_GO_analysis(
+    gene_list, background, data_source, result_path=None, alpha=0.05, methods=["fdr_bh"]
+):
     """
     Wrapper function to run GOATOOLS
     :param gene_list:
@@ -28,19 +23,19 @@ def run_GO_analysis(gene_list,
     """
     ### 0. Preprocessing parameters
     # determine data source
-    if data_source == 'human':
+    if data_source == "human":
         taxids = [9606]
-    elif data_source == 'mouse':
+    elif data_source == "mouse":
         taxids = [10090]
     else:
-        print('Data source can only be either human or mouse.')
+        print("Data source can only be either human or mouse.")
 
     if result_path is None:
-        obo = Path('./results', 'go-basic.obo')
-        gene2go = Path('./results', 'gene2go')
+        obo = Path("./results", "go-basic.obo")
+        gene2go = Path("./results", "gene2go")
     else:
-        obo = Path(result_path, 'go-basic.obo')
-        gene2go = Path(result_path, 'gene2go')
+        obo = Path(result_path, "go-basic.obo")
+        gene2go = Path(result_path, "gene2go")
 
     ### 1. Download Ontologies and Associations
     obo_fname, fin_gene2go = _download_go(obo, gene2go)
@@ -61,7 +56,8 @@ def run_GO_analysis(gene_list,
         obodag,  # Ontologies
         propagate_counts=False,
         alpha=alpha,  # default significance cut-off
-        methods=methods)  # defult multipletest correction method
+        methods=methods,
+    )  # defult multipletest correction method
 
     ### 4. Load study genes
     if type(gene_list[0]) == int:
@@ -71,7 +67,7 @@ def run_GO_analysis(gene_list,
 
     ### 5. Run GOEA
     goea_results_all = goeaobj.run_study(geneids_study)
-    #goea_results_sig = [r for r in goea_results_all if r.p_fdr_bh < 0.05]
+    # goea_results_sig = [r for r in goea_results_all if r.p_fdr_bh < 0.05]
 
     return goea_results_all
 
@@ -79,9 +75,9 @@ def run_GO_analysis(gene_list,
 def _symbols_to_ids(symbols, species):
     """Convert gene symbols to gene ids using mygene module"""
     mg = mygene.MyGeneInfo()
-    mg_df = mg.querymany(symbols, scopes='symbol', species=species, as_dataframe=True)
-    ids = mg_df['_id'].dropna()
-    ids = ids[~ids.str.startswith('ENSG')]
+    mg_df = mg.querymany(symbols, scopes="symbol", species=species, as_dataframe=True)
+    ids = mg_df["_id"].dropna()
+    ids = ids[~ids.str.startswith("ENSG")]
     ids = ids.astype(int)
     ids = list(ids)
 

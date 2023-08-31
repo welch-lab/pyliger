@@ -1,9 +1,9 @@
-from ._metrics import calc_dataset_specificity
-from ._umap import run_umap
-from ._marker import get_factor_markers
-from ._wilcoxon import run_wilcoxon, _wilcoxon
-from ._quantile_norm import quantile_norm
 from ._go import run_GO_analysis
+from ._marker import get_factor_markers
+from ._metrics import calc_dataset_specificity
+from ._quantile_norm import quantile_norm
+from ._umap import run_umap
+from ._wilcoxon import _wilcoxon, run_wilcoxon
 
 #######################################################################################
 #### Conversion/Transformation TODO
@@ -14,11 +14,23 @@ from ._go import run_GO_analysis
 #                  by_dataset = False):
 #    pass
 
+
 # Create liger object from one or more Seurat objects
-def seuratToLiger(liger_object, combined_seurat=False, names="use-projects", meta_var=None,
-                  assays_use=None, raw_assay="RNA", remove_missing=True, renormalize=True,
-                  use_seurat_genes=True, num_hvg_info=None, use_idents=True, use_tsne=True,
-                  cca_to_H=False):
+def seuratToLiger(
+    liger_object,
+    combined_seurat=False,
+    names="use-projects",
+    meta_var=None,
+    assays_use=None,
+    raw_assay="RNA",
+    remove_missing=True,
+    renormalize=True,
+    use_seurat_genes=True,
+    num_hvg_info=None,
+    use_idents=True,
+    use_tsne=True,
+    cca_to_H=False,
+):
     pass
 
 

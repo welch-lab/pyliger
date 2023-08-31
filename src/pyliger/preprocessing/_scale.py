@@ -1,3 +1,5 @@
+from typing import Optional
+
 import h5sparse
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -5,13 +7,10 @@ from sklearn.utils.sparsefuncs import inplace_column_scale
 
 from .._utilities import _h5_idx_generator
 
-from typing import Optional
 
-
-def scale_not_center(liger_object,
-                     remove_missing=True,
-                     chunk_size: Optional[int] = 1000
-                     ) -> None:
+def scale_not_center(
+    liger_object, remove_missing=True, chunk_size: Optional[int] = 1000
+) -> None:
     """Scale genes by root-mean-square across cells
 
     This function scales normalized gene expression data after variable genes have been selected.
@@ -48,7 +47,9 @@ def scale_not_center(liger_object,
 
         # On-disk mode (set for online learning approach)
         if adata.isbacked:
-            liger_object.adata_list[idx] = _scale_online(adata, var_gene_idx, chunk_size)
+            liger_object.adata_list[idx] = _scale_online(
+                adata, var_gene_idx, chunk_size
+            )
 
         # In-memory mode
         else:
@@ -58,20 +59,30 @@ def scale_not_center(liger_object,
 
 
 def _scale_online(adata, var_gene_idx, chunk_size):
-    file_path = './results/' + adata.uns['sample_name'] + '.hdf5'
-    with h5sparse.File(file_path, 'r+') as f:
+    file_path = "./results/" + adata.uns["sample_name"] + ".hdf5"
+    with h5sparse.File(file_path, "r+") as f:
         for left, right in _h5_idx_generator(chunk_size, adata.shape[0]):
-            scale_data = csr_matrix(f['norm_data'][left:right][:, var_gene_idx] /
-                                    np.sqrt(adata.var['norm_sum_sq'][var_gene_idx].to_numpy() /
-                                    (adata.shape[0] - 1)), dtype=np.float64)
-            if 'scale_data' not in f.keys():
-                f.create_dataset('scale_data', data=scale_data, chunks=(chunk_size,), maxshape=(None,))
+            scale_data = csr_matrix(
+                f["norm_data"][left:right][:, var_gene_idx]
+                / np.sqrt(
+                    adata.var["norm_sum_sq"][var_gene_idx].to_numpy()
+                    / (adata.shape[0] - 1)
+                ),
+                dtype=np.float64,
+            )
+            if "scale_data" not in f.keys():
+                f.create_dataset(
+                    "scale_data",
+                    data=scale_data,
+                    chunks=(chunk_size,),
+                    maxshape=(None,),
+                )
             else:
-                f['scale_data'].append(scale_data)
+                f["scale_data"].append(scale_data)
 
     # slice adata after keeping a raw version
-    #adata.raw = adata
-    file_name = './results/' + adata.uns['sample_name'] + '.h5ad'
+    # adata.raw = adata
+    file_name = "./results/" + adata.uns["sample_name"] + ".h5ad"
     adata = adata[:, var_gene_idx].copy(filename=file_name)
 
     return adata
@@ -84,22 +95,22 @@ def _scale_matrix(adata, var_gene_idx):
     adata = adata[:, var_gene_idx].copy()
 
     # calculate scale data
-    scale_data = adata.copy().layers['norm_data']
-    scaler = 1 / np.sqrt(adata.var['norm_sum_sq'].to_numpy() / (adata.shape[0] - 1))
+    scale_data = adata.copy().layers["norm_data"]
+    scaler = 1 / np.sqrt(adata.var["norm_sum_sq"].to_numpy() / (adata.shape[0] - 1))
     inplace_column_scale(scale_data, scaler)
-    adata.layers['scale_data'] = scale_data
+    adata.layers["scale_data"] = scale_data
 
-    #adata.layers['scale_data'] = csr_matrix(
+    # adata.layers['scale_data'] = csr_matrix(
     #    adata.layers['norm_data'] / np.sqrt(adata.var['norm_sum_sq'].to_numpy() / (adata.shape[0] - 1)),
     #    dtype=np.float64)
-    #scale_data = csr_matrix(
+    # scale_data = csr_matrix(
     #    selected_data / np.sqrt(np.sum(np.square(selected_data.toarray()), axis=0) / (selected_data.shape[0] - 1)),
     #    dtype=np.float64)
 
-    #numerical_idx = np.nonzero(var_gene_idx)[0]
-    #row_idx, col_idx = scale_data.nonzero()
-    #col_idx = np.take(numerical_idx, col_idx)
-    #adata.layers['scale_data'] = csr_matrix((scale_data.data, (row_idx, col_idx)),
+    # numerical_idx = np.nonzero(var_gene_idx)[0]
+    # row_idx, col_idx = scale_data.nonzero()
+    # col_idx = np.take(numerical_idx, col_idx)
+    # adata.layers['scale_data'] = csr_matrix((scale_data.data, (row_idx, col_idx)),
     #                                        shape=sample_shape, dtype=np.float64)
 
     # liger_object.adata_list[i] = liger_object.adata_list[i][:, idx].copy()

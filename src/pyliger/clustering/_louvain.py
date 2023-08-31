@@ -1,15 +1,12 @@
 import louvain
 import numpy as np
 
-from ._utilities import run_knn, compute_snn, build_igraph, _assign_cluster
+from ._utilities import _assign_cluster, build_igraph, compute_snn, run_knn
 
 
-def louvain_cluster(liger_object,
-                    resolution=1.0,
-                    k=20,
-                    prune=1 / 15,
-                    random_seed=1,
-                    n_starts=10):
+def louvain_cluster(
+    liger_object, resolution=1.0, k=20, prune=1 / 15, random_seed=1, n_starts=10
+):
     """Louvain algorithm for community detection
 
     After quantile normalization, users can additionally run the Louvain algorithm
@@ -45,7 +42,7 @@ def louvain_cluster(liger_object,
     >>> ligerex = louvain_cluster(ligerex, resulotion = 0.3) # liger object, factorization complete
     """
     ### 1. Compute snn
-    H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
+    H_norm = np.vstack([adata.obsm["H_norm"] for adata in liger_object.adata_list])
     knn = run_knn(H_norm, k)
     snn = compute_snn(knn, prune=prune)
 
@@ -57,8 +54,14 @@ def louvain_cluster(liger_object,
     max_quality = -1
     for i in range(n_starts):  # random starts to improve stability
         seed = np.random.randint(0, 1000)
-        kwargs = {'weights': g.es['weight'], 'resolution_parameter': resolution, 'seed': seed}  # parameters setting
-        part = louvain.find_partition(g, louvain.RBConfigurationVertexPartition, **kwargs)
+        kwargs = {
+            "weights": g.es["weight"],
+            "resolution_parameter": resolution,
+            "seed": seed,
+        }  # parameters setting
+        part = louvain.find_partition(
+            g, louvain.RBConfigurationVertexPartition, **kwargs
+        )
 
         if part.quality() > max_quality:
             cluster = part.membership

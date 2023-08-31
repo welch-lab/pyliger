@@ -1,16 +1,18 @@
 import leidenalg
 import numpy as np
 
-from ._utilities import run_knn, compute_snn, build_igraph, _assign_cluster
+from ._utilities import _assign_cluster, build_igraph, compute_snn, run_knn
 
 
-def leiden_cluster(liger_object,
-                   resolution=1.0,
-                   k=20,
-                   prune=1 / 15,
-                   random_seed=1,
-                   n_iterations=-1,
-                   n_starts=10):
+def leiden_cluster(
+    liger_object,
+    resolution=1.0,
+    k=20,
+    prune=1 / 15,
+    random_seed=1,
+    n_iterations=-1,
+    n_starts=10,
+):
     """Leiden algorithm for community detection
 
     After quantile normalization, users can additionally run the Leiden algorithm
@@ -50,7 +52,7 @@ def leiden_cluster(liger_object,
     >>> ligerex = leiden_cluster(ligerex, resulotion = 0.25) # liger object, factorization complete
     """
     ### 1. Compute snn
-    H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
+    H_norm = np.vstack([adata.obsm["H_norm"] for adata in liger_object.adata_list])
     knn = run_knn(H_norm, k)
     snn = compute_snn(knn, prune=prune)
 
@@ -63,9 +65,17 @@ def leiden_cluster(liger_object,
     # random starts to improve stability
     for i in range(n_starts):
         seed = np.random.randint(0, 1000)
-        kwargs = {'weights': g.es['weight'], 'resolution_parameter': resolution, 'seed': seed}  # parameters setting
-        part = leidenalg.find_partition(g, leidenalg.RBConfigurationVertexPartition, n_iterations=n_iterations,
-                                        **kwargs)
+        kwargs = {
+            "weights": g.es["weight"],
+            "resolution_parameter": resolution,
+            "seed": seed,
+        }  # parameters setting
+        part = leidenalg.find_partition(
+            g,
+            leidenalg.RBConfigurationVertexPartition,
+            n_iterations=n_iterations,
+            **kwargs,
+        )
 
         if part.quality() > max_quality:
             cluster = part.membership

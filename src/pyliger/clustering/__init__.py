@@ -1,15 +1,11 @@
-from ._louvain import louvain_cluster
 from ._leiden import leiden_cluster
+from ._louvain import louvain_cluster
 
 
 #####TODO
-def imputeKNN(liger_object,
-              reference,
-              queries,
-              knn_k=20,
-              weight=True,
-              norm=True,
-              scale=False):
+def imputeKNN(
+    liger_object, reference, queries, knn_k=20, weight=True, norm=True, scale=False
+):
     """Impute the query cell expression matrix
 
     Impute query features from a reference dataset using KNN.
@@ -43,15 +39,24 @@ def imputeKNN(liger_object,
     """
     pass
 
+
 # Linking genes to putative regulatory elements
-def linkGenesAndPeaks(gene_counts, peak_counts, path_to_coords, genes_list = None, dist = "spearman",
-                      alpha = 0.05):
+def linkGenesAndPeaks(
+    gene_counts,
+    peak_counts,
+    path_to_coords,
+    genes_list=None,
+    dist="spearman",
+    alpha=0.05,
+):
     pass
+
 
 # Export predicted gene-pair interaction
 def makeInteractTrack(corr_mat, genes_list, output_path, path_to_coords):
     pass
 
+
 # Analyze biological interpretations of metagene
-def runGSEA(liger_object, gene_sets = [], mat_w = True, mat_v = 0, custom_gene_sets = []):
+def runGSEA(liger_object, gene_sets=[], mat_w=True, mat_v=0, custom_gene_sets=[]):
     pass

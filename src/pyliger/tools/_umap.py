@@ -1,17 +1,19 @@
-import umap
-import umap.plot
 import numpy as np
 import pandas as pd
+import umap
+import umap.plot
 
 
-def run_umap(liger_object,
-             use_raw=False,
-             dims_use=None,
-             k=2,
-             distance="euclidean",
-             n_neighbors=10,
-             min_dist=0.1,
-             rand_seed=42):
+def run_umap(
+    liger_object,
+    use_raw=False,
+    dims_use=None,
+    k=2,
+    distance="euclidean",
+    n_neighbors=10,
+    min_dist=0.1,
+    rand_seed=42,
+):
     """Perform UMAP dimensionality reduction
 
     Run UMAP on the normalized cell factors (or raw cell factors) to generate a 2D embedding for
@@ -62,46 +64,59 @@ def run_umap(liger_object,
 
     ### Run umap
     if use_raw:
-        raw_data = np.vstack([adata.obsm['H'] for adata in liger_object.adata_list])
+        raw_data = np.vstack([adata.obsm["H"] for adata in liger_object.adata_list])
 
         # if H_norm not set yet
-        if 'H_norm' not in liger_object.adata_list[0].obs_keys():
+        if "H_norm" not in liger_object.adata_list[0].obs_keys():
             dims_use = list(range(raw_data.shape[1]))
         else:
-            H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
+            H_norm = np.vstack(
+                [adata.obsm["H_norm"] for adata in liger_object.adata_list]
+            )
             dims_use = list(range(H_norm.shape[1]))
 
-        umap_coords = umap.UMAP(n_components=k, metric=distance,
-                                n_neighbors=n_neighbors, min_dist=min_dist,
-                                random_state=rand_seed).fit_transform(raw_data[:, dims_use])
+        umap_coords = umap.UMAP(
+            n_components=k,
+            metric=distance,
+            n_neighbors=n_neighbors,
+            min_dist=min_dist,
+            random_state=rand_seed,
+        ).fit_transform(raw_data[:, dims_use])
     else:
-        #if dims_use is None:
+        # if dims_use is None:
         #    H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
         #    dims_use = list(range(H_norm.shape[1]))
 
         # tsne_coords = umap.UMAP(n_components=k, metric=distance,
         #                        n_neighbors=n_neighbors, min_dist=min_dist,
         #                        random_state=rand_seed).fit(H_norm[dims_use, :])
-        H_norm = np.vstack([adata.obsm['H_norm'] for adata in liger_object.adata_list])
-        umap_coords = umap.UMAP(n_components=k, metric=distance,
-                                n_neighbors=n_neighbors, min_dist=min_dist,
-                                random_state=rand_seed).fit_transform(H_norm)
+        H_norm = np.vstack([adata.obsm["H_norm"] for adata in liger_object.adata_list])
+        umap_coords = umap.UMAP(
+            n_components=k,
+            metric=distance,
+            n_neighbors=n_neighbors,
+            min_dist=min_dist,
+            random_state=rand_seed,
+        ).fit_transform(H_norm)
 
     ### Save umap results
-    liger_object.save_obsm(umap_coords, 'umap_coords')
+    liger_object.save_obsm(umap_coords, "umap_coords")
 
-    liger_object.tsne_coords = pd.DataFrame(umap_coords, columns=['tsne1', 'tsne2'])
+    liger_object.tsne_coords = pd.DataFrame(umap_coords, columns=["tsne1", "tsne2"])
     return None
 
+
 # Perform t-SNE dimensionality reduction
-def runTSNE(liger_object,
-            dims_use,
-            use_raw = False,
-            use_pca = False,
-            perplexity = 30,
-            theta = 0.5,
-            method = "Rtsne",
-            fitsne_path = None,
-            rand_seed = 42):
-    #dims_use = range(1, len(liger_object.H_norm))
+def runTSNE(
+    liger_object,
+    dims_use,
+    use_raw=False,
+    use_pca=False,
+    perplexity=30,
+    theta=0.5,
+    method="Rtsne",
+    fitsne_path=None,
+    rand_seed=42,
+):
+    # dims_use = range(1, len(liger_object.H_norm))
     pass

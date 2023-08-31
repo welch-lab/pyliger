@@ -1,13 +1,13 @@
 import numpy as np
-import scipy.sparse as sps
 import numpy.linalg as nla
 import scipy.linalg as sla
-from numba import jit, njit, prange
+import scipy.sparse as sps
+
 from .._utilities import _h5_idx_generator
 
 
 def nonneg(x, eps=1e-16):
-    """ Given a input matrix, set all negative values to be zero """
+    """Given a input matrix, set all negative values to be zero"""
     x[x < eps] = eps
     return x
 
@@ -28,12 +28,17 @@ def _init_W(num_genes, k, rand_seed):
 def _init_V(num_cells, num_samples, k, Xs):
     """helper function to initialize a V matrix for in-memory mode"""
     # pick k sample from datasets as initial V matrix
-    V = [Xs[i][:, np.random.choice(list(range(num_cells[i])), k)].toarray() for i in range(num_samples)]
+    V = [
+        Xs[i][:, np.random.choice(list(range(num_cells[i])), k)].toarray()
+        for i in range(num_samples)
+    ]
 
     # normalize columns of dictionaries
     V = [V[i] / np.sqrt(np.sum(np.square(V[i]), axis=0)) for i in range(num_samples)]
 
     return V
+
+
 """
 def _init_V_online(num_cells, num_samples, k, Xs, chunk_size, rand_seed):
 
@@ -59,6 +64,7 @@ def _init_V_online(num_cells, num_samples, k, Xs, chunk_size, rand_seed):
     return Vs
 """
 
+
 def _init_V_online(num_cell, k, X, chunk_size, rand_seed):
     """helper function to initialize a V matrix for online learning"""
     np.random.seed(seed=rand_seed)
@@ -67,9 +73,11 @@ def _init_V_online(num_cell, k, X, chunk_size, rand_seed):
     idx = np.sort(np.random.choice(list(range(num_cell)), k))
     V = []
     for left, right in _h5_idx_generator(chunk_size, num_cell):
-        select_idx = idx[(idx >= left) & (idx < right)] - left  # shift index because of handling chunk each time
+        select_idx = (
+            idx[(idx >= left) & (idx < right)] - left
+        )  # shift index because of handling chunk each time
         if select_idx.shape[0] > 0:  # only load chunks whose indexes are picked
-            X_chunk = X['scale_data'][left:right]
+            X_chunk = X["scale_data"][left:right]
             V.append(X_chunk[select_idx, :])
     V = sps.vstack(V).transpose().toarray()
 
@@ -84,9 +92,11 @@ def _init_H(num_cells, num_samples, k):
     H = [np.random.uniform(0, 2, (k, num_cells[i])) for i in range(num_samples)]
     return H
 
+
 def _init_Hi():
     """"""
     return None
+
 
 def _update_W_HALS(A, B, W, V):
     """helper function to update W matrix by HALS
@@ -95,7 +105,9 @@ def _update_W_HALS(A, B, W, V):
         W_update_numerator = np.zeros(W.shape[0])
         W_update_denominator = 0.0
         for i in range(len(V)):
-            W_update_numerator = W_update_numerator + B[i][:, j] - ((W + V[i]) @ A[i])[:, j]
+            W_update_numerator = (
+                W_update_numerator + B[i][:, j] - ((W + V[i]) @ A[i])[:, j]
+            )
             W_update_denominator += A[i][j, j]
         W[:, j] = nonneg(W[:, j] + W_update_numerator / W_update_denominator)
 
@@ -107,7 +119,11 @@ def _update_V_HALS(A, B, W, V, value_lambda):
     A = HiHi^t, B = XiHit, W = gene x k, V = [gene x k]"""
     for j in range(W.shape[1]):
         for i in range(len(V)):
-            V[i][:, j] = nonneg(V[i][:, j] + (B[i][:, j] - (W + (1 + value_lambda) * V[i]) @ A[i][:, j]) / ((1 + value_lambda) * A[i][j, j]))
+            V[i][:, j] = nonneg(
+                V[i][:, j]
+                + (B[i][:, j] - (W + (1 + value_lambda) * V[i]) @ A[i][:, j])
+                / ((1 + value_lambda) * A[i][j, j])
+            )
 
     return V
 
@@ -119,10 +135,15 @@ def _update_H_HALS(H, V, W, X, value_lambda):
     W_Vi_sq = [W_Vii.transpose() @ W_Vii for W_Vii in W_Vi]
     for i in range(len(V)):
         for j in range(W.shape[1]):
-            H[i][j, :] = nonneg(H[i][j, :] + (
-                    W_Vi[i][:, j].transpose() @ X[i] - W_Vi[i][:, j].transpose() @ W_Vi[i] @ H[
-                i] - value_lambda * VitVi[i][j, :] @ H[i]) / (
-                                        W_Vi_sq[i][j, j] + value_lambda * VitVi[i][j, j]))
+            H[i][j, :] = nonneg(
+                H[i][j, :]
+                + (
+                    W_Vi[i][:, j].transpose() @ X[i]
+                    - W_Vi[i][:, j].transpose() @ W_Vi[i] @ H[i]
+                    - value_lambda * VitVi[i][j, :] @ H[i]
+                )
+                / (W_Vi_sq[i][j, j] + value_lambda * VitVi[i][j, j])
+            )
     return H
 
 
@@ -130,7 +151,7 @@ def _update_H_HALS(H, V, W, X, value_lambda):
 """
 #@jit(nopython=True)
 def _update_W_HALS(A, B, W, V):
-    
+
     for j in range(W.shape[1]):
         W_update_numerator = np.zeros(W.shape[0])
         W_update_denominator = 0.0
@@ -154,8 +175,10 @@ def _update_V_HALS(A, B, W, V, value_lambda):
 
     return V
 """
+
+
 def nnlsm_blockpivot(A, B, is_input_prod=False, init=None):
-    """ Nonnegativity-constrained least squares with block principal pivoting method and column grouping
+    """Nonnegativity-constrained least squares with block principal pivoting method and column grouping
     Solves min ||AX-B||_2^2 s.t. X >= 0 element-wise.
     J. Kim and H. Park, Fast nonnegative matrix factorization: An active-set-like method and comparisons,
     SIAM Journal on Scientific Computing,
@@ -253,14 +276,14 @@ def nnlsm_blockpivot(A, B, is_input_prod=False, init=None):
             PassSet[false_set] = False
         if cols3.size > 0:
             for col in cols3:
-                candi_set = np.logical_or(
-                    not_opt_set[:, col], infea_set[:, col])
+                candi_set = np.logical_or(not_opt_set[:, col], infea_set[:, col])
                 to_change = np.max(candi_set.nonzero()[0])
                 PassSet[to_change, col] = ~PassSet[to_change, col]
                 num_backup += 1
 
         (X[:, not_opt_cols], temp_cholesky, temp_eq) = normal_eq_comb(
-            AtA, AtB[:, not_opt_cols], PassSet[:, not_opt_cols])
+            AtA, AtB[:, not_opt_cols], PassSet[:, not_opt_cols]
+        )
         num_cholesky += temp_cholesky
         num_eq += temp_eq
         X[abs(X) < 1e-16] = 0
@@ -268,10 +291,8 @@ def nnlsm_blockpivot(A, B, is_input_prod=False, init=None):
         Y[abs(Y) < 1e-16] = 0
 
         not_opt_mask = np.tile(not_opt_colset, (n, 1))
-        not_opt_set = np.logical_and(
-            np.logical_and(not_opt_mask, Y < 0), ~PassSet)
-        infea_set = np.logical_and(
-            np.logical_and(not_opt_mask, X < 0), PassSet)
+        not_opt_set = np.logical_and(np.logical_and(not_opt_mask, Y < 0), ~PassSet)
+        infea_set = np.logical_and(np.logical_and(not_opt_mask, X < 0), PassSet)
         not_good = np.sum(not_opt_set, axis=0) + np.sum(infea_set, axis=0)
         not_opt_colset = not_good > 0
         not_opt_cols = not_opt_colset.nonzero()[0]
@@ -280,7 +301,7 @@ def nnlsm_blockpivot(A, B, is_input_prod=False, init=None):
 
 
 def normal_eq_comb(AtA, AtB, PassSet=None):
-    """ Solve many systems of linear equations using combinatorial grouping.
+    """Solve many systems of linear equations using combinatorial grouping.
     M. H. Van Benthem and M. R. Keenan, J. Chemometrics 2004; 18: 441-450
     Parameters
     ----------
@@ -327,7 +348,7 @@ def normal_eq_comb(AtA, AtB, PassSet=None):
                     # For small n(<200), numpy.linalg.solve appears faster, whereas
                     # for large n(>500), scipy.linalg.cho_solve appears faster.
                     # Usage example of scipy.linalg.cho_solve:
-                    #Z[ix1] = sla.cho_solve(sla.cho_factor(AtA[ix2]),AtB[ix1])
+                    # Z[ix1] = sla.cho_solve(sla.cho_factor(AtA[ix2]),AtB[ix1])
                     #
                     Z[ix1] = nla.solve(AtA[ix2], AtB[ix1])
                     num_cholesky += 1
@@ -337,7 +358,7 @@ def normal_eq_comb(AtA, AtB, PassSet=None):
 
 
 def _column_group_recursive(B):
-    """ Given a binary matrix, find groups of the same columns
+    """Given a binary matrix, find groups of the same columns
         with a recursive strategy
     Parameters
     ----------

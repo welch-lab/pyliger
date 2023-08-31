@@ -3,20 +3,23 @@ import pandas as pd
 from scipy.sparse import vstack
 from sklearn.preprocessing import scale
 
-from ..tools import calc_dataset_specificity, _wilcoxon
+from ..tools import _wilcoxon, calc_dataset_specificity
+
 
 # Find shared and dataset-specific markers
-def get_factor_markers(liger_object,
-                       dataset1 = 0,
-                       dataset2 = 1,
-                       factor_share_thresh = 10,
-                       dataset_specificity = None,
-                       log_fc_thresh = 1,
-                       umi_thresh = 30,
-                       frac_thresh = 0,
-                       pval_thresh = 0.05,
-                       num_genes = 30,
-                       print_genes = False):
+def get_factor_markers(
+    liger_object,
+    dataset1=0,
+    dataset2=1,
+    factor_share_thresh=10,
+    dataset_specificity=None,
+    log_fc_thresh=1,
+    umi_thresh=30,
+    frac_thresh=0,
+    pval_thresh=0.05,
+    num_genes=30,
+    print_genes=False,
+):
     """Find shared and dataset-specific markers
 
     Applies various filters to genes on the shared (W) and dataset-specific (V)  of the
@@ -58,12 +61,18 @@ def get_factor_markers(liger_object,
         num_genes = len(liger_object.var_genes)
 
     if dataset_specificity is None:
-        dataset_specificity = calc_dataset_specificity(liger_object, dataset1=dataset1, dataset2=dataset2, do_plot=False)
+        dataset_specificity = calc_dataset_specificity(
+            liger_object, dataset1=dataset1, dataset2=dataset2, do_plot=False
+        )
 
     factors_use = np.abs(dataset_specificity[2]) <= factor_share_thresh
 
     if len(factors_use) < 2:
-        print('Warning: only {} factors passed the dataset specificity threshold.'.format(len(factors_use)))
+        print(
+            "Warning: only {} factors passed the dataset specificity threshold.".format(
+                len(factors_use)
+            )
+        )
 
     ### Extract values
     # scale H matrices
@@ -82,8 +91,15 @@ def get_factor_markers(liger_object,
         V2 = liger_object.V[dataset2]
 
         # if not max factor for any cell in either dataset
-        if np.sum(labels[dataset1] == factor) <= 1 or np.sum(labels[dataset2] == factor) <= 1:
-            print('Warning: factor {} did not appear as max in any cell in either dataset.'.format(factor))
+        if (
+            np.sum(labels[dataset1] == factor) <= 1
+            or np.sum(labels[dataset2] == factor) <= 1
+        ):
+            print(
+                "Warning: factor {} did not appear as max in any cell in either dataset.".format(
+                    factor
+                )
+            )
             continue
 
         # Filter genes by gene_count and cell_frac thresholds
@@ -91,59 +107,106 @@ def get_factor_markers(liger_object,
         for dset in [dataset1, dataset2]:
             adata = liger_object.adata_list[dset]
             idx = labels[dset] == factor
-            expr_mat.append(adata.layers['norm_data'][idx, :])
+            expr_mat.append(adata.layers["norm_data"][idx, :])
         expr_mat = vstack(expr_mat)
-        cell_label = np.concatenate(np.repeat(dataset1, np.sum(labels[dataset1] == factor)), np.repeat(dataset1, np.sum(labels[dataset2] == factor)))
+        cell_label = np.concatenate(
+            np.repeat(dataset1, np.sum(labels[dataset1] == factor)),
+            np.repeat(dataset1, np.sum(labels[dataset2] == factor)),
+        )
         wilcoxon_result = _wilcoxon(np.log(expr_mat.toarray() + 1e-10), cell_label)
 
         # filter based on log-fold change
-        #log2fc = wilcoxon_result[wilcoxon_result['group'] == dataset1]['logFC'].to_numpy()
-        filtered_genes_V1 = wilcoxon_result[(wilcoxon_result['logFC'] > log_fc_thresh) & (wilcoxon_result['pval'] < pval_thresh)]['feature'].to_numpy()
-        filtered_genes_V2 = wilcoxon_result[(-wilcoxon_result['logFC'] > log_fc_thresh) & (wilcoxon_result['pval'] < pval_thresh)]['feature'].to_numpy()
+        # log2fc = wilcoxon_result[wilcoxon_result['group'] == dataset1]['logFC'].to_numpy()
+        filtered_genes_V1 = wilcoxon_result[
+            (wilcoxon_result["logFC"] > log_fc_thresh)
+            & (wilcoxon_result["pval"] < pval_thresh)
+        ]["feature"].to_numpy()
+        filtered_genes_V2 = wilcoxon_result[
+            (-wilcoxon_result["logFC"] > log_fc_thresh)
+            & (wilcoxon_result["pval"] < pval_thresh)
+        ]["feature"].to_numpy()
 
-        W = np.minimum((W+V1), (W+V2))
+        W = np.minimum((W + V1), (W + V2))
         V1 = V1[filtered_genes_V1, :]
         V2 = V2[filtered_genes_V2, :]
 
         if np.sum(filtered_genes_V1) == 0:
             top_genes_V1 = None
         else:
-            top_genes_V1 = liger_object.adata_list[dataset1].var.index[np.argsort(V1[:, factor])[0:num_genes]]
+            top_genes_V1 = liger_object.adata_list[dataset1].var.index[
+                np.argsort(V1[:, factor])[0:num_genes]
+            ]
 
         if len(filtered_genes_V2) == 0:
             top_genes_V2 = None
         else:
-            top_genes_V2 = liger_object.adata_list[dataset2].var.index[np.argsort(V2[:, factor])[0:num_genes]]
+            top_genes_V2 = liger_object.adata_list[dataset2].var.index[
+                np.argsort(V2[:, factor])[0:num_genes]
+            ]
 
-        top_genes_W = liger_object.adata_list[dataset1].var.index[np.argsort(W[:, factor])[0:num_genes]]
+        top_genes_W = liger_object.adata_list[dataset1].var.index[
+            np.argsort(W[:, factor])[0:num_genes]
+        ]
 
         if print_genes:
-            print('Factor: ', factor)
-            print('Dataset 1')
+            print("Factor: ", factor)
+            print("Dataset 1")
             print(top_genes_V1)
-            print('Shared')
+            print("Shared")
             print(top_genes_W)
-            print('Dataset 2')
+            print("Dataset 2")
             print(top_genes_V2)
 
-        pvals = [] # order is V1, V2, W
+        pvals = []  # order is V1, V2, W
         top_genes = [top_genes_V1, top_genes_V2, top_genes_W]
 
         for idx, gene_list in enumerate(top_genes):
-            pvals.append(wilcoxon_result[(wilcoxon_result['feature'].isin(gene_list)) & (wilcoxon_result['group']==dataset1)]['pval'].to_numpy())
+            pvals.append(
+                wilcoxon_result[
+                    (wilcoxon_result["feature"].isin(gene_list))
+                    & (wilcoxon_result["group"] == dataset1)
+                ]["pval"].to_numpy()
+            )
 
-        V1_matrices.append(pd.DataFrame({'factor_num': np.repeat(factor, len(top_genes_V1)),
-                                         'gene': top_genes_V1,
-                                         'log2fc': wilcoxon_result[(wilcoxon_result['group'] == dataset1) & (wilcoxon_result['feature'].isin(top_genes_V1))]['logFC'].to_numpy(),
-                                         'p_value': pvals[0]}))
-        V2_matrices.append(pd.DataFrame({'factor_num': np.repeat(factor, len(top_genes_V2)),
-                                         'gene': top_genes_V1,
-                                         'log2fc': wilcoxon_result[(wilcoxon_result['group'] == dataset1) & (wilcoxon_result['feature'].isin(top_genes_V2))]['logFC'].to_numpy(),
-                                         'p_value': pvals[1]}))
-        W_matrices.append(pd.DataFrame({'factor_num': np.repeat(factor, len(top_genes_W)),
-                                         'gene': top_genes_V1,
-                                         'log2fc': wilcoxon_result[(wilcoxon_result['group'] == dataset1) & (wilcoxon_result['feature'].isin(top_genes_W))]['logFC'].to_numpy(),
-                                         'p_value': pvals[2]}))
+        V1_matrices.append(
+            pd.DataFrame(
+                {
+                    "factor_num": np.repeat(factor, len(top_genes_V1)),
+                    "gene": top_genes_V1,
+                    "log2fc": wilcoxon_result[
+                        (wilcoxon_result["group"] == dataset1)
+                        & (wilcoxon_result["feature"].isin(top_genes_V1))
+                    ]["logFC"].to_numpy(),
+                    "p_value": pvals[0],
+                }
+            )
+        )
+        V2_matrices.append(
+            pd.DataFrame(
+                {
+                    "factor_num": np.repeat(factor, len(top_genes_V2)),
+                    "gene": top_genes_V1,
+                    "log2fc": wilcoxon_result[
+                        (wilcoxon_result["group"] == dataset1)
+                        & (wilcoxon_result["feature"].isin(top_genes_V2))
+                    ]["logFC"].to_numpy(),
+                    "p_value": pvals[1],
+                }
+            )
+        )
+        W_matrices.append(
+            pd.DataFrame(
+                {
+                    "factor_num": np.repeat(factor, len(top_genes_W)),
+                    "gene": top_genes_V1,
+                    "log2fc": wilcoxon_result[
+                        (wilcoxon_result["group"] == dataset1)
+                        & (wilcoxon_result["feature"].isin(top_genes_W))
+                    ]["logFC"].to_numpy(),
+                    "p_value": pvals[2],
+                }
+            )
+        )
 
     V1_genes = pd.concat(V1_matrices)
     V2_genes = pd.concat(V2_matrices)
@@ -153,9 +216,10 @@ def get_factor_markers(liger_object,
     # cutoff only applies to dataset-specific dfs
     for idx, df in enumerate(output_list):
         if idx != 1:
-            output_list[idx] = df[df['p_value'] < pval_thresh]
+            output_list[idx] = df[df["p_value"] < pval_thresh]
 
     return output_list
+
 
 """
 def get_factor_markers(liger_object,

@@ -1,7 +1,7 @@
-import numpy as np
 import igraph as ig
-from numba import njit
+import numpy as np
 from annoy import AnnoyIndex
+from numba import njit
 from pynndescent import NNDescent
 from scipy.sparse import csr_matrix
 from sklearn.neighbors import NearestNeighbors
@@ -9,7 +9,7 @@ from sklearn.neighbors import NearestNeighbors
 
 def run_knn(H, k):
     """ """
-    neigh = NearestNeighbors(n_neighbors=k, radius=0, algorithm='kd_tree')
+    neigh = NearestNeighbors(n_neighbors=k, radius=0, algorithm="kd_tree")
     neigh.fit(H)
     H_knn = neigh.kneighbors(H, n_neighbors=k, return_distance=False)
 
@@ -17,7 +17,6 @@ def run_knn(H, k):
 
 
 def run_ann(H, k, num_trees=None):
-
     # implementation using annoy library
     num_observations = H.shape[0]
 
@@ -33,14 +32,14 @@ def run_ann(H, k, num_trees=None):
             num_trees = 100
 
     # build knn graph
-    t = AnnoyIndex(k, 'angular')
+    t = AnnoyIndex(k, "angular")
     for i in range(num_observations):
         t.add_item(i, H[i])
     t.build(num_trees)
 
     # create knn indices matrices
     H_knn = np.vstack([t.get_nns_by_vector(H[i], k) for i in range(num_observations)])
-    #for i in range(num_observations):
+    # for i in range(num_observations):
     #    if i == 0:
     #        H_knn = np.array(t.get_nns_by_vector(H[i], k))
     #    else:
@@ -50,7 +49,6 @@ def run_ann(H, k, num_trees=None):
 
 
 def run_pynndescent(H, k, num_trees=None):
-
     num_observations = H.shape[0]
 
     index = NNDescent(H)
@@ -85,7 +83,7 @@ def cluster_vote(clusts, H_knn, k):
 
 
 def refine_clusts(H, clusts, k, use_ann, num_trees=None):
-    """helper function for refining clusters related to function quantile_norm """
+    """helper function for refining clusters related to function quantile_norm"""
     if use_ann:
         H_knn = run_ann(H, k, num_trees)
     else:
@@ -96,7 +94,7 @@ def refine_clusts(H, clusts, k, use_ann, num_trees=None):
     return clusts
 
 
-#@njit
+# @njit
 def compute_snn(knn, prune):
     """helper function to compute the SNN graph"""
     # int for indexing
@@ -129,7 +127,7 @@ def build_igraph(snn):
     g = ig.Graph()
     g.add_vertices(snn.shape[0])
     g.add_edges(list(zip(sources, targets)))
-    g.es['weight'] = weights
+    g.es["weight"] = weights
 
     return g
 
@@ -139,6 +137,8 @@ def _assign_cluster(cluster, liger_object):
     cluster = np.ravel(cluster)
     idx = 0
     for i, adata in enumerate(liger_object.adata_list):
-        liger_object.adata_list[i].obs['cluster'] = cluster[idx:(idx + adata.shape[0])]
+        liger_object.adata_list[i].obs["cluster"] = cluster[
+            idx : (idx + adata.shape[0])
+        ]
         idx += adata.shape[0]
     return None
