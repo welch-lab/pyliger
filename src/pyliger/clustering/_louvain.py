@@ -1,7 +1,12 @@
 import louvain
 import numpy as np
 
-from ._utilities import _assign_cluster, build_igraph, compute_snn, run_knn
+from pyliger.clustering._utilities import (
+    _assign_cluster,
+    build_igraph,
+    compute_snn,
+    run_knn,
+)
 
 
 def louvain_cluster(

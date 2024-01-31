@@ -4,8 +4,8 @@ import h5sparse
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from .._utilities import _h5_idx_generator, _merge_sparse_data_all, _remove_missing_obs
-from ..pyliger import Liger
+from pyliger._utilities import _h5_idx_generator, _merge_sparse_data_all, _remove_missing_obs
+from pyliger.pyliger import Liger
 
 
 def create_liger(

@@ -1,11 +1,4 @@
 # from ._qc import plot_qc
-import numpy as np
-
-from ._dataset_cluster import plot_by_dataset_and_cluster
-from ._gene import plot_gene
-from ._gene_loadings import plot_gene_loadings
-from ._go import plot_go_term
-from ._spatial import plot_spatial
 
 
 ###############TODO

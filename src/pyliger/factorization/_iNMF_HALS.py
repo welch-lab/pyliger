@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 
-from ._utilities import (
+from pyliger.factorization._utilities import (
     _init_H,
     _init_V,
     _init_W,

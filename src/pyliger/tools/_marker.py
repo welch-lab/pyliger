@@ -3,8 +3,8 @@ import pandas as pd
 from scipy.sparse import vstack
 from sklearn.preprocessing import scale
 
-from ..tools import _wilcoxon, calc_dataset_specificity
-
+from pyliger.tools import _wilcoxon
+from pyliger.tools._metrics import calc_dataset_specificity
 
 # Find shared and dataset-specific markers
 def get_factor_markers(

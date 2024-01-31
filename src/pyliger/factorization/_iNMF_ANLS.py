@@ -1,7 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 
-from ._utilities import nnlsm_blockpivot
+from pyliger.factorization._utilities import nnlsm_blockpivot
 
 
 def optimize_ALS(

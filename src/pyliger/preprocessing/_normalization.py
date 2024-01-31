@@ -5,8 +5,8 @@ import h5sparse
 import numpy as np
 from sklearn.preprocessing import normalize as sp_normalize
 
-from .._utilities import _h5_idx_generator, _remove_missing_obs
-from ..pyliger import Liger
+from pyliger._utilities import _h5_idx_generator, _remove_missing_obs
+from pyliger.pyliger import Liger
 
 PARRENT_PATH = Path(__file__).parent
 

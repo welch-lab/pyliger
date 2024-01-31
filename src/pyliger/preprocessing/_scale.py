@@ -5,7 +5,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from sklearn.utils.sparsefuncs import inplace_column_scale
 
-from .._utilities import _h5_idx_generator
+from pyliger._utilities import _h5_idx_generator
 
 
 def scale_not_center(

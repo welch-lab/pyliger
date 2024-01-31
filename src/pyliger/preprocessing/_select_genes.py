@@ -8,7 +8,7 @@ from scipy.optimize import minimize
 from scipy.stats import norm
 from sklearn.utils.sparsefuncs import mean_variance_axis
 
-from .._utilities import _h5_idx_generator
+from pyliger._utilities import _h5_idx_generator
 
 
 def select_genes(

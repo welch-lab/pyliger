@@ -1,10 +1,3 @@
-from ._go import run_GO_analysis
-from ._marker import get_factor_markers
-from ._metrics import calc_dataset_specificity
-from ._quantile_norm import quantile_norm
-from ._umap import run_umap
-from ._wilcoxon import _wilcoxon, run_wilcoxon
-
 #######################################################################################
 #### Conversion/Transformation TODO
 

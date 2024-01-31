@@ -3,11 +3,11 @@ import numpy as np
 from scipy.sparse import vstack
 from tqdm import tqdm
 
-from .._utilities import _h5_idx_generator
-from ..preprocessing._initialization import _initialization_online
-from ..preprocessing._normalization import _normalize_online
-from ..preprocessing._scale import _scale_online
-from ._utilities import (
+from pyliger._utilities import _h5_idx_generator
+from pyliger.preprocessing._initialization import _initialization_online
+from pyliger.preprocessing._normalization import _normalize_online
+from pyliger.preprocessing._scale import _scale_online
+from pyliger.factorization._utilities import (
     _init_V_online,
     _init_W,
     _update_V_HALS,

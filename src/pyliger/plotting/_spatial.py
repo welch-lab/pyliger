@@ -13,7 +13,7 @@ from plotnine import (
     ylim,
 )
 
-from ._utilities import get_gene_values
+from pyliger.plotting._utilities import get_gene_values
 
 
 def plot_spatial(

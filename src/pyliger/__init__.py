@@ -1,17 +1,19 @@
-from .clustering import leiden_cluster, louvain_cluster
-from .factorization import iNMF_HALS, online_iNMF, optimize_ALS
-from .plotting import (
-    plot_by_dataset_and_cluster,
-    plot_gene,
-    plot_gene_loadings,
-    plot_spatial,
-)
-from .preprocessing import (
-    create_liger,
-    make_feature_matrix,
-    normalize,
-    scale_not_center,
-    select_genes,
-)
+from .clustering._leiden import leiden_cluster
+from .clustering._louvain import louvain_cluster
+from .factorization._iNMF_HALS import iNMF_HALS
+from .factorization._online_iNMF import online_iNMF
+from .factorization._iNMF_ANLS import optimize_ALS
+from .plotting._dataset_cluster import plot_by_dataset_and_cluster
+from .plotting._gene import plot_gene
+from .plotting._gene_loadings import plot_gene_loadings
+from .plotting._spatial import plot_spatial
+from .preprocessing._initialization import create_liger
+from .preprocessing._select_genes import select_genes
+from .preprocessing._normalization import normalize
+from .preprocessing._scale import scale_not_center
+from .preprocessing._cal_feature import make_feature_matrix
 from .read_write import read_10X, read_10X_h5, read_10X_visium
-from .tools import quantile_norm, run_umap, run_wilcoxon
+from .tools._quantile_norm import quantile_norm
+from .tools._umap import run_umap
+from .tools._wilcoxon import run_wilcoxon
+from .pyliger import Liger

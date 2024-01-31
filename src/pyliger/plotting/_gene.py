@@ -21,7 +21,7 @@ from plotnine import (
 )
 from sklearn.preprocessing import scale
 
-from ._utilities import get_gene_values
+from pyliger.plotting._utilities import get_gene_values
 
 
 def plot_gene(

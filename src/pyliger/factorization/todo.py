@@ -1,6 +1,3 @@
-from ._iNMF_ANLS import optimize_ALS
-from ._iNMF_HALS import iNMF_HALS
-from ._online_iNMF import online_iNMF
 
 #######################################################################################
 #### Factorization TODO

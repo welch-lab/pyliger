@@ -3,7 +3,7 @@ import numpy.linalg as nla
 import scipy.linalg as sla
 import scipy.sparse as sps
 
-from .._utilities import _h5_idx_generator
+from pyliger._utilities import _h5_idx_generator
 
 
 def nonneg(x, eps=1e-16):

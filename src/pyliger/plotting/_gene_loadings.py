@@ -18,7 +18,8 @@ from plotnine import (
 )
 from tqdm import tqdm
 
-from ..tools import calc_dataset_specificity, get_factor_markers
+from pyliger.tools._marker import get_factor_markers
+from pyliger.tools._metrics import calc_dataset_specificity
 
 
 def plot_gene_loadings(
