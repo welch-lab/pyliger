@@ -42,7 +42,7 @@ dependencies = [
     "matplotlib",
     "mygene",
     "numexpr",
-    "numba >= 0.57.0rc1",
+    "numba @ git+https://github.com/numba/numba.git#59adb07109d75745a93591fb77513d5f5c44c8ae",
     "numpy",
     "pandas",
     "plotnine",
@@ -62,8 +62,8 @@ maintainers = [
 ]
 name = "pyliger"
 readme = "README.md"
-requires-python = "<3.12, >=3.8"
-version = "0.2.0"
+requires-python = "<3.13, >=3.9"
+version = "0.2.1rc1"
 
 [project.license]
 text = "MIT"
