@@ -43,7 +43,7 @@ dependencies = [
     "mygene",
     "numexpr",
     "numba",
-    "numpy",
+    "numpy<2",
     "pandas",
     "plotnine",
     "python-igraph",
