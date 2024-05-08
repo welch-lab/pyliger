@@ -1,10 +1,11 @@
+from os import path
 from typing import List, Optional
 
 import h5sparse
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from pyliger._utilities import _h5_idx_generator, _merge_sparse_data_all, _remove_missing_obs
+from pyliger._utilities import _h5_idx_generator, _create_h5_using_adata, _merge_sparse_data_all, _remove_missing_obs
 from pyliger.pyliger import Liger
 
 
@@ -82,6 +83,8 @@ def _initialization_online(adata, chunk_size, remove_missing):
     nGene = np.zeros(adata.shape[0])
 
     file_path = "./results/" + adata.uns["sample_name"] + ".hdf5"
+    if not path.exists(file_path):
+        _create_h5_using_adata(adata, chunk_size)
     with h5sparse.File(file_path, "r") as f:
         for left, right in _h5_idx_generator(chunk_size, adata.shape[0]):
             raw_data = csr_matrix(f["raw_data"][left:right])
