@@ -113,7 +113,7 @@ def get_factor_markers(
             (np.repeat(dataset1, np.sum(labels[dataset1] == factor)),
             np.repeat(dataset1, np.sum(labels[dataset2] == factor))),
         )
-        wilcoxon_result = _wilcoxon(np.log(expr_mat.toarray() + 1e-10), cell_label)
+        wilcoxon_result = _wilcoxon._wilcoxon(np.log(expr_mat.toarray() + 1e-10), cell_label)
 
         # filter based on log-fold change
         # log2fc = wilcoxon_result[wilcoxon_result['group'] == dataset1]['logFC'].to_numpy()
