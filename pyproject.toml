@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "adjustText",
-    "anndata",
+    "anndata @ git+https://github.com/scverse/anndata.git",
     "annoy",
     "bokeh",
     "colorcet",
@@ -43,7 +43,7 @@ dependencies = [
     "mygene",
     "numexpr",
     "numba",
-    "numpy<2",
+    "numpy",
     "pandas",
     "plotnine",
     "python-igraph",

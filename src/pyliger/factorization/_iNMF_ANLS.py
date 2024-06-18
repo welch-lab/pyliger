@@ -96,7 +96,7 @@ def optimize_ALS(
             )
         )
 
-    best_obj = np.Inf
+    best_obj = np.inf
 
     for j in range(nrep):
         np.random.seed(seed=rand_seed + j - 1)
