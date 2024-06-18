@@ -111,7 +111,7 @@ def get_factor_markers(
         expr_mat = vstack(expr_mat)
         cell_label = np.concatenate(
             (np.repeat(dataset1, np.sum(labels[dataset1] == factor)),
-            np.repeat(dataset1, np.sum(labels[dataset2] == factor))),
+            np.repeat(dataset2, np.sum(labels[dataset2] == factor))),
         )
         wilcoxon_result = _wilcoxon._wilcoxon(np.log(expr_mat.toarray() + 1e-10), cell_label)
 
