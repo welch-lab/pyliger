@@ -21,21 +21,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Setup PDM
-      uses: pdm-project/setup-pdm@v3
+      uses: pdm-project/setup-pdm@v4
       with:
-        python-version: "3.11"
+        python-version: "3.12"
         cache: true
         architecture : x64
         prerelease: false
-        version: 2.4.9
+        version: 2.15.4
     - name: Get build tool
       run: pip install build
     - name: Build package
       run: python -m build
     - name: Publish package
-      uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
+      uses: pypa/gh-action-pypi-publish@release/v1
       with:
         user: __token__
         password: ${{ secrets.PYPI_API_TOKEN }}
