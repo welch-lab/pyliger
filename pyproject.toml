@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "adjustText",
-    "anndata @ git+https://github.com/scverse/anndata.git",
+    "anndata",
     "annoy",
     "bokeh",
     "colorcet",
