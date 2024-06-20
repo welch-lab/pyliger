@@ -65,7 +65,7 @@ maintainers = [
 name = "pyliger"
 readme = "README.md"
 requires-python = "<3.13, >=3.9"
-version = "0.2.2"
+version = "0.2.3"
 
 [project.license]
 text = "GPL-3.0-only"
