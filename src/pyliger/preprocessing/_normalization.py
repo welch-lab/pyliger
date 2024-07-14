@@ -1,8 +1,9 @@
 from pathlib import Path
 from typing import Optional
 
-import h5sparse
-import numpy as np
+import lazy_loader as lazy
+h5sparse = lazy.load("h5sparse", error_on_import=True)
+np = lazy.load("numpy", error_on_import=True)
 from sklearn.preprocessing import normalize as sp_normalize
 
 from pyliger._utilities import _h5_idx_generator, _remove_missing_obs

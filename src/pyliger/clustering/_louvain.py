@@ -1,5 +1,6 @@
-import louvain
-import numpy as np
+import lazy_loader as lazy
+louvain = lazy.load("louvain", error_on_import=True)
+np = lazy.load("numpy", error_on_import=True)
 
 from pyliger.clustering._utilities import (
     _assign_cluster,

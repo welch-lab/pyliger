@@ -1,4 +1,5 @@
-import numpy as np
+import lazy_loader as lazy
+np = lazy.load("numpy", error_on_import=True)
 import numpy.linalg as nla
 import scipy.linalg as sla
 import scipy.sparse as sps

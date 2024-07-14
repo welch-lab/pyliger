@@ -1,6 +1,6 @@
 from pathlib import Path
-
-import mygene
+import lazy_loader as lazy
+mygene = lazy.load("mygene", error_on_import=True)
 from goatools.anno.genetogo_reader import Gene2GoReader
 from goatools.base import download_go_basic_obo, download_ncbi_associations
 from goatools.goea.go_enrichment_ns import GOEnrichmentStudyNS

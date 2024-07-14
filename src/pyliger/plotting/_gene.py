@@ -1,8 +1,9 @@
+import lazy_loader as lazy
 import warnings
 from typing import Optional
 
-import numpy as np
-import pandas as pd
+np = lazy.load("numpy", error_on_import=True)
+pd  = lazy.load("pandas", error_on_import=True)
 from plotnine import (
     aes,
     element_blank,

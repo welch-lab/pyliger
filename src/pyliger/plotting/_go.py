@@ -5,11 +5,13 @@ from collections import OrderedDict, defaultdict
 from datetime import date
 from math import log, log10
 
-import matplotlib
+import lazy_loader as lazy
+
+matplotlib = lazy.load("matplotlib", error_on_import=True)
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import seaborn as sns
+np = lazy.load("numpy", error_on_import=True)
+pd  = lazy.load("pandas", error_on_import=True)
+sns = lazy.load("seaborn", error_on_import=True)
 from adjustText import (
     adjust_text,
 )  # # Python package which rearranges plot labels to ensure minimal overlap

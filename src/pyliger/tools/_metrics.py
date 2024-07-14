@@ -1,4 +1,5 @@
-import numpy as np
+import lazy_loader as lazy
+np = lazy.load("numpy", error_on_import=True)
 
 
 def calc_dataset_specificity(liger_object, dataset1=None, dataset2=None, do_plot=True):

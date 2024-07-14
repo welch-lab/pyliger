@@ -1,5 +1,6 @@
-import h5sparse
-import numpy as np
+import lazy_loader as lazy
+h5sparse = np = lazy.load("h5sparse", error_on_import=True)
+np = lazy.load("numpy", error_on_import=True)
 from scipy.sparse import vstack
 from tqdm import tqdm
 

@@ -1,8 +1,9 @@
 from os import path
 from typing import List, Optional
 
-import h5sparse
-import numpy as np
+import lazy_loader as lazy
+h5sparse = lazy.load("h5sparse", error_on_import=True)
+np = lazy.load("numpy", error_on_import=True)
 from scipy.sparse import csr_matrix
 
 from pyliger._utilities import _h5_idx_generator, _create_h5_using_adata, _merge_sparse_data_all, _remove_missing_obs

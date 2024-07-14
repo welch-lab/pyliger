@@ -1,9 +1,10 @@
 import warnings
 
-import h5sparse
+import lazy_loader as lazy
+h5sparse = lazy.load("h5sparse", error_on_import=True)
 import matplotlib.pyplot as plt
-import numexpr as ne
-import numpy as np
+ne = lazy.load("numexpr", error_on_import=True)
+np = lazy.load("numpy", error_on_import=True)
 from scipy.optimize import minimize
 from scipy.stats import norm
 from sklearn.utils.sparsefuncs import mean_variance_axis

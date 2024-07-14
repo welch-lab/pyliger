@@ -1,5 +1,6 @@
-import leidenalg
-import numpy as np
+import lazy_loader as lazy
+leidenalg = lazy.load("leidenalg", error_on_import=True)
+np = lazy.load("numpy", error_on_import=True)
 
 from pyliger.clustering._utilities import (
     _assign_cluster,

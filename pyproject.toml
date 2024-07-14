@@ -54,6 +54,7 @@ dependencies = [
     "setuptools>=68.0.0",
     "dask>=2024.4.1",
     "dask-expr>=1.1.0",
+    "lazy-loader>=0.4",
 ]
 description = "The Python version of LIGER package."
 keywords = [

@@ -3,10 +3,12 @@ import os
 import re
 from pathlib import Path
 
-import anndata
-import h5py
-import numpy as np
-import pandas as pd
+import lazy_loader as lazy
+
+anndata = lazy.load("anndata", error_on_import=True)
+h5py = lazy.load("h5py", error_on_import=True)
+np = lazy.load("numpy", error_on_import=True)
+pd  = lazy.load("pandas", error_on_import=True)
 import scipy.io
 from anndata import AnnData
 from matplotlib.image import imread
