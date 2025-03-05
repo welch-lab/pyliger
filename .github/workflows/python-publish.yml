@@ -29,7 +29,7 @@ jobs:
         cache: true
         architecture : x64
         prerelease: false
-        version: 2.15.4
+        version: 2.22.3
     - name: Get build tool
       run: pip install build
     - name: Build package
