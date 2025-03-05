@@ -114,7 +114,7 @@ def read_10X(
 
         # remove -1 tag from barcodes
         for i in range(barcodes.size):
-            barcodes[i] = re.sub("\-1$", "", barcodes[i])
+            barcodes[i] = re.sub("-1$", "", barcodes[i])
 
         col_names = pd.DataFrame(barcodes, columns=["barcodes"])
 
