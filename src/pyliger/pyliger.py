@@ -107,9 +107,9 @@ class Liger(object):
     def show(self):
         print(
             "An object of class liger with {} datasets and {} total cells.".format(
-                self.num_samples
-            ),
-            len(self.cell_data),
+                self.num_samples,
+                len(self.cell_data)
+            )
         )
 
     def add_adata(self, new_arrive):
