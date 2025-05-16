@@ -2,11 +2,16 @@
 exclude = "/(\n    \\.eggs\n  | \\.git\n  | \\.hg\n  | \\.mypy_cache\n  | \\.nox\n  | \\.tox\n  | \\.venv\n  | _build\n  | buck-out\n  | build\n  | dist\n)/\n"
 include = "\\.pyi?$"
 
-[tool.pdm.build]
-excludes = [
+[tool.uv]
+override-dependencies = ["docopt ; sys_platform == 'never'",]
+[build-system]
+requires = ["uv_build>=0.7.4,<0.8.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+source-excludes = [
     "contrib",
 ]
-package-dir = "src"
 
 [project]
 authors = [
@@ -49,6 +54,7 @@ dependencies = [
     "dask>=2024.4.1",
     "dask-expr>=1.1.0",
     "lazy-loader>=0.4",
+    "docopt-ng>=0.9.0",
 ]
 description = "The Python version of LIGER package."
 keywords = [
