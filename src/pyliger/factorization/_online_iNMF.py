@@ -192,7 +192,6 @@ def _online_iNMF_refine(
         "B_prev": [adata.varm["B"] for adata in liger_object.adata_list],
         "V_prev": [adata.varm["V"] for adata in liger_object.adata_list],
     }
-
     for i, adata in enumerate(X_new):
         # open hdf5 files
         X = [_get_scale_data(adata)]
@@ -202,8 +201,8 @@ def _online_iNMF_refine(
         # X = [csr_matrix(scipy.io.mmread('/Users/lulu/Desktop/nuclei.mtx').transpose())]
 
         num_cells = [adata.shape[0]]
-
-        # calculate W, V, H matrices for the new datasets
+        H_init = [np.abs(np.random.uniform(0, 2, (num_cells[i], factorization_params['k']))) for i in
+                 num_cells] if matrices_init_dict['H_init'] is None else matrices_init_dict['H_init']        # calculate W, V, H matrices for the new datasets
         W, Vs, A, B = _online_iNMF_cal_W_V(
             X,
             num_genes,
@@ -214,25 +213,24 @@ def _online_iNMF_refine(
             **factorization_params,
         )
 
-        Hs = _online_iNMF_cal_H(
-            X,
-            W,
-            Vs,
-            num_genes,
-            num_cells,
-            verbose,
-            factorization_params["value_lambda"],
-            factorization_params["miniBatch_size"],
-        )
-
+        plancResults = pyplanc.oinmf(X, H_init, Vs, W, A, B, factorization_params["k"], 2,
+                                     factorization_params["value_lambda"], factorization_params["max_epochs"],
+                                     factorization_params["miniBatch_size"],
+                                     factorization_params['miniBatch_max_iters'], factorization_params['h5_chunk_size'],
+                                     verbose)
+        out_Hs = plancResults.Hlist
+        out_Vs = plancResults.Vlist
+        out_W = plancResults.W
+        out_As = plancResults.Alist
+        out_Bs = plancResults.Blist
         # Sava results and close hdf5 files
-        if isinstance(X[0], h5sparse.h5sparse.File):
-            X[0].close()
-        X_new[i].obsm["H"] = Hs[0].transpose()
-        X_new[i].varm["W"] = W
-        X_new[i].varm["V"] = Vs[0]
-        X_new[i].varm["B"] = B[0]
-        X_new[i].uns["A"] = A[0]
+        if isinstance(X[0], pyplanc.H5SpMat):
+            del X[0]
+        X_new[i].obsm["H"] = out_Hs[0]
+        X_new[i].varm["W"] = out_W
+        X_new[i].varm["V"] = out_Vs[0]
+        X_new[i].varm["B"] = out_Bs[0]
+        X_new[i].uns["A"] = out_As[0]
 
         matrices_init_dict["W_init"] = W
 
@@ -242,20 +240,19 @@ def _online_iNMF_refine(
         # X = [csr_matrix(scipy.io.mmread('/Users/lulu/Desktop/cells.mtx').transpose())]
         Vs = [adata.varm["V"]]
         num_cells = [adata.shape[0]]
-        Hs = _online_iNMF_cal_H(
-            X,
-            W,
-            Vs,
-            num_genes,
-            num_cells,
-            verbose,
-            factorization_params["value_lambda"],
-            factorization_params["miniBatch_size"],
-        )
+        H_init = [np.abs(np.random.uniform(0, 2, (num_cells[i], factorization_params['k']))) for i in
+                 num_cells] if matrices_init_dict['H_init'] is None else matrices_init_dict['H_init']        # calculate W, V, H matrices for the new datasets
+        plancResults = pyplanc.oinmf(X, H_init, Vs, W, A, B, factorization_params["k"], 2,
+                                     factorization_params["value_lambda"], factorization_params["max_epochs"],
+                                     factorization_params["miniBatch_size"],
+                                     factorization_params['miniBatch_max_iters'], factorization_params['h5_chunk_size'],
+                                     verbose)
 
-        if isinstance(X[0], h5sparse.h5sparse.File):
-            X[0].close()
-        liger_object.adata_list[i].obsm["H"] = Hs[0].transpose()
+        Hs = plancResults.Hlist
+
+        if isinstance(X[0], pyplanc.H5SpMat):
+            del X[0]
+        liger_object.adata_list[i].obsm["H"] = Hs[0]
         liger_object.adata_list[i].varm["W"] = W
 
     for adata in X_new:
