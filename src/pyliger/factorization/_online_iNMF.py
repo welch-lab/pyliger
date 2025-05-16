@@ -166,8 +166,8 @@ def _online_iNMF_from_scratch(
 
     ### 2. Sava results and close hdf5 files
     for file in Xs:  # close all files in the end
-        if isinstance(file, h5sparse.h5sparse.File):
-            file.close()
+        if isinstance(file, pyplanc.H5SpMat):
+            del file
 
     for i in range(num_files):
         liger_object.adata_list[i].obsm["H"] = Hs[i].transpose()
@@ -295,7 +295,7 @@ def _projection(liger_object, X_new, W_init, k, miniBatch_size):
 
     # Sava results and close hdf5 files
     for i in range(num_files):
-        if isinstance(Xs[i], h5sparse.h5sparse.File):
+        if isinstance(Xs[i], pyplanc.H5SpMat):
             del Xs[i]
         X_new[i].obsm["H"] = Hs[i]
         X_new[i].varm["W"] = plancResults.W
