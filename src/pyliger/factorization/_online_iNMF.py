@@ -141,8 +141,8 @@ def _online_iNMF_from_scratch(
     # from scipy.sparse import csr_matrix
     # Xs = [csr_matrix(scipy.io.mmread('/Users/lulu/Documents/GitHub/pyliger/results/stim.mtx').transpose()), csr_matrix(scipy.io.mmread('/Users/lulu/Documents/GitHub/pyliger/results/ctrl.mtx').transpose())]
     # Xs = [csr_matrix(scipy.io.mmread('/Users/lulu/Desktop/cells.mtx').transpose())]
-
-    ### 1. Run Online_iNMF
+    H_init = [np.abs(np.random.uniform(0, 2, (num_cells[i], factorization_params['k']))) for i in
+              range(num_files)] if matrices_init_dict['H_init'] is None else matrices_init_dict['H_init']
     W, Vs, A, B = _online_iNMF_cal_W_V(
         Xs,
         num_genes,
@@ -152,29 +152,24 @@ def _online_iNMF_from_scratch(
         **matrices_init_dict,
         **factorization_params,
     )
+    plancResults = pyplanc.oinmf(Xs, H_init, Vs, W, A, B, factorization_params["k"], 2, factorization_params["value_lambda"], factorization_params["max_epochs"], factorization_params["miniBatch_size"], factorization_params['miniBatch_max_iters'], factorization_params['h5_chunk_size'],verbose)
 
-    Hs = _online_iNMF_cal_H(
-        Xs,
-        W,
-        Vs,
-        num_genes,
-        num_cells,
-        verbose,
-        factorization_params["value_lambda"],
-        factorization_params["miniBatch_size"],
-    )
-
+    out_Hs = plancResults.Hlist
+    out_Vs = plancResults.Vlist
+    out_W = plancResults.W
+    out_As = plancResults.Alist
+    out_Bs = plancResults.Blist
     ### 2. Sava results and close hdf5 files
     for file in Xs:  # close all files in the end
         if isinstance(file, pyplanc.H5SpMat):
             del file
 
     for i in range(num_files):
-        liger_object.adata_list[i].obsm["H"] = Hs[i].transpose()
-        liger_object.adata_list[i].varm["W"] = W
-        liger_object.adata_list[i].varm["V"] = Vs[i]
-        liger_object.adata_list[i].varm["B"] = B[i]
-        liger_object.adata_list[i].uns["A"] = A[i]
+        liger_object.adata_list[i].obsm["H"] = out_Hs[i]
+        liger_object.adata_list[i].varm["W"] = out_W
+        liger_object.adata_list[i].varm["V"] = out_Vs[i]
+        liger_object.adata_list[i].varm["B"] = out_Bs[i]
+        liger_object.adata_list[i].uns["A"] = out_As[i]
 
     return None
 
