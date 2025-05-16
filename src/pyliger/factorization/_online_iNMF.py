@@ -289,41 +289,16 @@ def _projection(liger_object, X_new, W_init, k, miniBatch_size):
     # from scipy.sparse import csr_matrix
     # Xs = [csr_matrix(scipy.io.mmread('/Users/lulu/Desktop/nuclei.mtx').transpose())]
 
-    Hs = []
-    Vs = []
-    for i in range(num_files):
-        num_batch = np.ceil(num_cells[i] / miniBatch_size).astype(int)
-        H_miniBatch = []
-        for batch in range(num_batch):
-            if batch != num_batch:
-                X_miniBatch = (
-                    Xs[i]["scale_data"][
-                        batch * miniBatch_size : (batch + 1) * miniBatch_size
-                    ]
-                    .transpose()
-                    .toarray()
-                )
-                # X_miniBatch = Xs[i][
-                #              batch * miniBatch_size:(batch + 1) * miniBatch_size].transpose().toarray()
-            else:
-                X_miniBatch = (
-                    Xs[i]["scale_data"][batch * miniBatch_size : num_cells[i]]
-                    .transpose()
-                    .toarray()
-                )
-                # X_miniBatch = Xs[i][batch * miniBatch_size:num_cells[i]].transpose().toarray()
-
-            H_miniBatch.append(nnlsm_blockpivot(A=W, B=X_miniBatch)[0])
-
-        Hs.append(np.hstack(H_miniBatch))
-        Vs.append(np.zeros((num_genes, k)))
+    plancResults = pyplanc.oinmf_project(Xs, W, miniBatch_size)
+    Hs = plancResults.Hlist
+    Vs = plancResults.Vlist
 
     # Sava results and close hdf5 files
     for i in range(num_files):
         if isinstance(Xs[i], h5sparse.h5sparse.File):
-            Xs[i].close()
-        X_new[i].obsm["H"] = Hs[i].transpose()
-        X_new[i].varm["W"] = W
+            del Xs[i]
+        X_new[i].obsm["H"] = Hs[i]
+        X_new[i].varm["W"] = plancResults.W
         X_new[i].varm["V"] = Vs[i]
 
         # add object into liger object TODO: think of another way of appending adata into liger object
