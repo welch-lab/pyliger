@@ -1,9 +1,3 @@
-[build-system]
-build-backend = "pdm.backend"
-requires = [
-    "pdm-backend",
-]
-
 [tool.black]
 exclude = "/(\n    \\.eggs\n  | \\.git\n  | \\.hg\n  | \\.mypy_cache\n  | \\.nox\n  | \\.tox\n  | \\.venv\n  | _build\n  | buck-out\n  | build\n  | dist\n)/\n"
 include = "\\.pyi?$"
