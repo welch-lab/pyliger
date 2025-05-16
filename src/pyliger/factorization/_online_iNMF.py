@@ -1,4 +1,5 @@
 import lazy_loader as lazy
+import pyplanc
 h5sparse = lazy.load("h5sparse", error_on_import=True)
 np = lazy.load("numpy", error_on_import=True)
 from scipy.sparse import vstack
@@ -555,9 +556,9 @@ def _chunk_permutation(num_cell, h5_chunk_size):
 def _get_scale_data(adata):
     """helper function to open hdf5 files if AnnData is on-disk, otherwise get scale data from AnnData object"""
     if adata.isbacked:
-        return h5sparse.File("./results/" + adata.uns["sample_name"] + ".hdf5", "r")
+        return pyplanc.H5SpMat("./results/" + adata.uns["sample_name"] + ".hdf5", "scale_data/indices", "scale_data/indptr", "scale_data/data", adata.n_obs, adata.n_vars)
     else:
-        return adata.layers
+        return adata.layers["scale_data"]
 
 
 def _update_A_B(
