@@ -2,7 +2,6 @@ import lazy_loader as lazy
 np = lazy.load("numpy", error_on_import=True)
 pd  = lazy.load("pandas", error_on_import=True)
 umap  = lazy.load("umap", error_on_import=True)
-import umap.plot
 
 
 def run_umap(
